@@ -2,13 +2,15 @@
 
 from pathlib import Path
 
-DYNO_HOME = Path.home() / ".dyno"
-# Point the bot's sandbox at its own source — python/ directory
+# Everything lives inside the project: dyno-app/data/
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # dyno-app/
+DATA_DIR = PROJECT_ROOT / "data"
 TOOLS_DIR = Path(__file__).resolve().parent.parent  # python/
-SCREENSHOTS_DIR = DYNO_HOME / "screenshots"
-UPLOADS_DIR = DYNO_HOME / "uploads"
+SCREENSHOTS_DIR = DATA_DIR / "screenshots"
+UPLOADS_DIR = DATA_DIR / "uploads"
 
 # Ensure directories exist
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 

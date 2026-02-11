@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 
-const UPLOADS_DIR = path.join(os.homedir(), ".dyno", "uploads");
+const UPLOADS_DIR = path.resolve(process.cwd(), "data", "uploads");
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: NextRequest) {

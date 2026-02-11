@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 
-const SCREENSHOTS_DIR = path.join(os.homedir(), ".dyno", "screenshots");
+const SCREENSHOTS_DIR = path.resolve(process.cwd(), "data", "screenshots");
 
 export async function GET() {
   try {

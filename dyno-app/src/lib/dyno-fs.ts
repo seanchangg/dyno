@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 
 const DEFAULT_CLAUDE_MD = `# Agent System Prompt
 
@@ -12,29 +11,26 @@ You are a helpful personal AI agent managed through Dyno.
 - Log your thinking process
 `;
 
-function getDynoHome(): string {
-  const envHome = process.env.DYNO_HOME;
-  if (envHome) {
-    return envHome.replace(/^~/, os.homedir());
-  }
-  return path.join(os.homedir(), ".dyno");
+/** All local data lives inside the project: dyno-app/data/ */
+function getDataDir(): string {
+  return path.resolve(process.cwd(), "data");
 }
 
 export async function ensureDynoDir(): Promise<string> {
-  const home = getDynoHome();
-  await fs.mkdir(path.join(home, "context"), { recursive: true });
-  await fs.mkdir(path.join(home, "tools"), { recursive: true });
-  await fs.mkdir(path.join(home, "logs"), { recursive: true });
-  await fs.mkdir(path.join(home, "screenshots"), { recursive: true });
-  await fs.mkdir(path.join(home, "uploads"), { recursive: true });
-  return home;
+  const dataDir = getDataDir();
+  await fs.mkdir(path.join(dataDir, "context"), { recursive: true });
+  await fs.mkdir(path.join(dataDir, "logs"), { recursive: true });
+  await fs.mkdir(path.join(dataDir, "config"), { recursive: true });
+  await fs.mkdir(path.join(dataDir, "screenshots"), { recursive: true });
+  await fs.mkdir(path.join(dataDir, "uploads"), { recursive: true });
+  return dataDir;
 }
 
-export { getDynoHome };
+export { getDataDir };
 
 export async function initializeDefaultContext(userName?: string): Promise<void> {
-  const home = await ensureDynoDir();
-  const contextPath = path.join(home, "context", "claude.md");
+  const dataDir = await ensureDynoDir();
+  const contextPath = path.join(dataDir, "context", "claude.md");
   try {
     await fs.access(contextPath);
   } catch {
@@ -50,8 +46,8 @@ export async function initializeDefaultContext(userName?: string): Promise<void>
 }
 
 export async function readContextFile(filename: string): Promise<string> {
-  const home = getDynoHome();
-  const filePath = path.join(home, "context", filename);
+  const dataDir = getDataDir();
+  const filePath = path.join(dataDir, "context", filename);
   return fs.readFile(filePath, "utf-8");
 }
 
@@ -59,14 +55,14 @@ export async function writeContextFile(
   filename: string,
   content: string
 ): Promise<void> {
-  const home = await ensureDynoDir();
-  const filePath = path.join(home, "context", filename);
+  const dataDir = await ensureDynoDir();
+  const filePath = path.join(dataDir, "context", filename);
   await fs.writeFile(filePath, content, "utf-8");
 }
 
 export async function listContextFiles(): Promise<string[]> {
-  const home = getDynoHome();
-  const contextDir = path.join(home, "context");
+  const dataDir = getDataDir();
+  const contextDir = path.join(dataDir, "context");
   try {
     return await fs.readdir(contextDir);
   } catch {
@@ -75,8 +71,8 @@ export async function listContextFiles(): Promise<string[]> {
 }
 
 export async function appendTelemetry(entry: Record<string, unknown>): Promise<void> {
-  const home = await ensureDynoDir();
-  const logPath = path.join(home, "logs", "telemetry.json");
+  const dataDir = await ensureDynoDir();
+  const logPath = path.join(dataDir, "logs", "telemetry.json");
   let entries: Record<string, unknown>[] = [];
   try {
     const raw = await fs.readFile(logPath, "utf-8");
@@ -89,8 +85,8 @@ export async function appendTelemetry(entry: Record<string, unknown>): Promise<v
 }
 
 export async function readTelemetry(): Promise<Record<string, unknown>[]> {
-  const home = getDynoHome();
-  const logPath = path.join(home, "logs", "telemetry.json");
+  const dataDir = getDataDir();
+  const logPath = path.join(dataDir, "logs", "telemetry.json");
   try {
     const raw = await fs.readFile(logPath, "utf-8");
     return JSON.parse(raw);
@@ -99,36 +95,11 @@ export async function readTelemetry(): Promise<Record<string, unknown>[]> {
   }
 }
 
-export async function writeToolFile(
-  name: string,
-  content: string
-): Promise<void> {
-  const home = await ensureDynoDir();
-  const filePath = path.join(home, "tools", name);
-  await fs.writeFile(filePath, content, "utf-8");
-}
-
-export async function listToolFiles(): Promise<string[]> {
-  const home = getDynoHome();
-  const toolsDir = path.join(home, "tools");
-  try {
-    return await fs.readdir(toolsDir);
-  } catch {
-    return [];
-  }
-}
-
-export async function readToolFile(name: string): Promise<string> {
-  const home = getDynoHome();
-  const filePath = path.join(home, "tools", name);
-  return fs.readFile(filePath, "utf-8");
-}
-
 const DEFAULT_MAX_STORED_MESSAGES = 200;
 
 export async function readChatHistory(): Promise<Record<string, unknown>[]> {
-  const home = getDynoHome();
-  const historyPath = path.join(home, "logs", "chat-history.json");
+  const dataDir = getDataDir();
+  const historyPath = path.join(dataDir, "logs", "chat-history.json");
   try {
     const raw = await fs.readFile(historyPath, "utf-8");
     return JSON.parse(raw);
@@ -141,15 +112,15 @@ export async function writeChatHistory(
   messages: Record<string, unknown>[],
   maxStoredMessages?: number
 ): Promise<void> {
-  const home = await ensureDynoDir();
-  const historyPath = path.join(home, "logs", "chat-history.json");
+  const dataDir = await ensureDynoDir();
+  const historyPath = path.join(dataDir, "logs", "chat-history.json");
   const limit = maxStoredMessages ?? DEFAULT_MAX_STORED_MESSAGES;
   const trimmed = messages.slice(-limit);
   await fs.writeFile(historyPath, JSON.stringify(trimmed, null, 2), "utf-8");
 }
 
 export async function clearChatHistory(): Promise<void> {
-  const home = getDynoHome();
-  const historyPath = path.join(home, "logs", "chat-history.json");
+  const dataDir = getDataDir();
+  const historyPath = path.join(dataDir, "logs", "chat-history.json");
   await fs.writeFile(historyPath, "[]", "utf-8");
 }

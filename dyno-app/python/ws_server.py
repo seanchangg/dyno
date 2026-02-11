@@ -461,7 +461,7 @@ async def handle_chat(websocket, data):
     try:
         phase1_kwargs = dict(
             model=model or DEFAULT_MODEL,
-            max_tokens=4096,
+            max_tokens=8192,
             messages=messages,
             tools=[ACTIVATE_TOOLS_DEF],
         )

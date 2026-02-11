@@ -12,15 +12,16 @@ from anthropic import Anthropic
 from tools import AGENT_TOOLS, TOOL_HANDLERS, READ_ONLY_TOOLS
 
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
-DEFAULT_MAX_TOKENS = 4096
+DEFAULT_MAX_TOKENS = 8192
 DEFAULT_MAX_ITERATIONS = 15
 
-DYNO_HOME = Path.home() / ".dyno"
-CONFIG_PATH = DYNO_HOME / "config" / "agent.json"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent  # dyno-app/
+DATA_DIR = PROJECT_ROOT / "data"
+CONFIG_PATH = DATA_DIR / "config" / "agent.json"
 
 
 def load_config() -> dict:
-    """Load agent config from ~/.dyno/config/agent.json, with defaults."""
+    """Load agent config from data/config/agent.json, with defaults."""
     defaults = {
         "default_model": DEFAULT_MODEL,
         "max_iterations": DEFAULT_MAX_ITERATIONS,
@@ -60,8 +61,8 @@ TOOL_DESCRIPTIONS_APPENDIX = (
     "- `tools/__init__.py` — aggregates all skills\n"
     "- `tools/_common.py` — shared constants\n\n"
     "### Other tools\n"
-    "- `take_screenshot`: Capture a webpage as PNG (saved to ~/.dyno/screenshots/)\n"
-    "- `read_upload`: Read user-uploaded files from ~/.dyno/uploads/\n"
+    "- `take_screenshot`: Capture a webpage as PNG (saved to data/screenshots/)\n"
+    "- `read_upload`: Read user-uploaded files from data/uploads/\n"
     "- `fetch_url`: Fetch and read content from a URL\n"
     "- `install_package`: Install an npm package\n\n"
     "### Memory tools\n"
@@ -75,8 +76,8 @@ TOOL_DESCRIPTIONS_APPENDIX = (
 
 
 def get_base_prompt() -> str:
-    """Load base system prompt from ~/.dyno/context/claude.md if available."""
-    context_file = DYNO_HOME / "context" / "claude.md"
+    """Load base system prompt from data/context/claude.md if available."""
+    context_file = DATA_DIR / "context" / "claude.md"
     try:
         return context_file.read_text(encoding="utf-8")
     except FileNotFoundError:

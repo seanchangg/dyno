@@ -15,7 +15,7 @@ import importlib
 import sys
 from pathlib import Path
 
-from ._common import DYNO_HOME, TOOLS_DIR, SCREENSHOTS_DIR, UPLOADS_DIR, safe_path
+from ._common import DATA_DIR, TOOLS_DIR, SCREENSHOTS_DIR, UPLOADS_DIR, safe_path
 
 _TOOLS_DIR = Path(__file__).parent
 _SKIP = {"__init__", "_common"}
@@ -76,7 +76,7 @@ __all__ = [
     "TOOL_HANDLERS",
     "READ_ONLY_TOOLS",
     "reload_tools",
-    "DYNO_HOME",
+    "DATA_DIR",
     "TOOLS_DIR",
     "SCREENSHOTS_DIR",
     "UPLOADS_DIR",
