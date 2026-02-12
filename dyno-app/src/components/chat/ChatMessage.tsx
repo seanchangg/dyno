@@ -1,6 +1,8 @@
 "use client";
 
 import { clsx } from "clsx";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import ThinkingTrace from "./ThinkingTrace";
 import type { ChatMessage as ChatMessageType } from "@/types";
 
@@ -26,7 +28,15 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           isUser ? "bg-primary text-text" : "bg-surface text-text"
         )}
       >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        ) : (
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
       <span className="text-[10px] text-text/30 px-1">
         {new Date(message.timestamp).toLocaleTimeString()}

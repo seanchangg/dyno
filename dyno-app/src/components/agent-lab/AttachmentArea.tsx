@@ -7,6 +7,7 @@ interface AttachmentAreaProps {
   attachments: Attachment[];
   onAdd: (attachment: Attachment) => void;
   onRemove: (id: string) => void;
+  onError?: (message: string) => void;
   disabled?: boolean;
 }
 
@@ -14,6 +15,7 @@ export default function AttachmentArea({
   attachments,
   onAdd,
   onRemove,
+  onError,
   disabled,
 }: AttachmentAreaProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,7 +38,7 @@ export default function AttachmentArea({
 
       if (!res.ok) {
         const err = await res.json();
-        console.error("Upload failed:", err.error);
+        onError?.(`Upload failed: ${err.error || "Unknown error"}`);
         return;
       }
 
@@ -46,8 +48,8 @@ export default function AttachmentArea({
         type: "file",
         name: data.filename,
       });
-    } catch (err) {
-      console.error("Upload error:", err);
+    } catch {
+      onError?.("Failed to upload file");
     } finally {
       setUploading(false);
       // Reset input so re-selecting the same file works

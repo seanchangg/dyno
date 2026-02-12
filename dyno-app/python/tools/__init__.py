@@ -15,7 +15,7 @@ import importlib
 import sys
 from pathlib import Path
 
-from ._common import DATA_DIR, TOOLS_DIR, SCREENSHOTS_DIR, UPLOADS_DIR, safe_path
+from ._common import DATA_DIR, TOOLS_DIR, SCREENSHOTS_DIR, UPLOADS_DIR, SCRIPTS_DIR, safe_path
 
 _TOOLS_DIR = Path(__file__).parent
 _SKIP = {"__init__", "_common"}
@@ -80,5 +80,6 @@ __all__ = [
     "TOOLS_DIR",
     "SCREENSHOTS_DIR",
     "UPLOADS_DIR",
+    "SCRIPTS_DIR",
     "safe_path",
 ]

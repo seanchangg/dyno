@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface Memory {
   id: string;
@@ -10,9 +10,15 @@ export interface Memory {
   updated_at: string;
 }
 
-export function useMemories(userId: string | undefined) {
+interface UseMemoriesOptions {
+  onError?: (message: string) => void;
+}
+
+export function useMemories(userId: string | undefined, options?: UseMemoriesOptions) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
+  const onErrorRef = useRef(options?.onError);
+  onErrorRef.current = options?.onError;
 
   const refresh = useCallback(async () => {
     if (!userId) return;
@@ -21,7 +27,7 @@ export function useMemories(userId: string | undefined) {
       const data = await res.json();
       setMemories(data.memories ?? []);
     } catch {
-      // ignore
+      onErrorRef.current?.("Failed to load memories");
     } finally {
       setLoading(false);
     }
@@ -34,12 +40,16 @@ export function useMemories(userId: string | undefined) {
   const saveMemory = useCallback(
     async (tag: string, content: string) => {
       if (!userId) return;
-      await fetch("/api/memories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, tag, content }),
-      });
-      refresh();
+      try {
+        await fetch("/api/memories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, tag, content }),
+        });
+        refresh();
+      } catch {
+        onErrorRef.current?.("Failed to save memory");
+      }
     },
     [userId, refresh]
   );
@@ -47,10 +57,14 @@ export function useMemories(userId: string | undefined) {
   const deleteMemory = useCallback(
     async (id: string) => {
       if (!userId) return;
-      await fetch(`/api/memories?userId=${userId}&id=${id}`, {
-        method: "DELETE",
-      });
-      refresh();
+      try {
+        await fetch(`/api/memories?userId=${userId}&id=${id}`, {
+          method: "DELETE",
+        });
+        refresh();
+      } catch {
+        onErrorRef.current?.("Failed to delete memory");
+      }
     },
     [userId, refresh]
   );

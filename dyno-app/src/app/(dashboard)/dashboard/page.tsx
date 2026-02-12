@@ -1,126 +1,95 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import ChatWindow from "@/components/chat/ChatWindow";
-import MemoryTable from "@/components/chat/MemoryTable";
-import Card from "@/components/ui/Card";
-import { useAgentStatus } from "@/hooks/useAgentStatus";
-import { useAuth } from "@/hooks/useAuth";
-import { useMemories } from "@/hooks/useMemories";
-import {
-  fetchTokenUsageTotals,
-  type TokenUsageTotals,
-} from "@/lib/token-usage";
-
-const REFRESH_INTERVAL = 5000;
+import { useCallback, useState, useRef, useEffect } from "react";
+import WidgetCanvas from "@/components/widgets/WidgetCanvas";
+import { useWidgetLayoutContext } from "@/hooks/useWidgetLayoutContext";
+import { useSession } from "@/hooks/useSessionManager";
+import { getAllWidgetTypes } from "@/lib/widgets/registry";
+import type { Widget } from "@/types/widget";
 
 export default function DashboardPage() {
-  const { status } = useAgentStatus();
-  const { user } = useAuth();
-  const { memories, saveMemory, deleteMemory, refresh: refreshMemories } = useMemories(user?.id);
-  const [selectedMemoryIds, setSelectedMemoryIds] = useState<Set<string>>(new Set());
-  const [totals, setTotals] = useState<TokenUsageTotals>({
-    totalTokensIn: 0,
-    totalTokensOut: 0,
-    sessionCount: 0,
-  });
+  const { widgets, setWidgets, processUIAction } = useWidgetLayoutContext();
+  const { cancelSession } = useSession("master");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const refresh = useCallback(async () => {
-    if (!user) return;
-    const t = await fetchTokenUsageTotals(user.id);
-    setTotals(t);
-  }, [user]);
+  const handleLayoutChange = useCallback(
+    (updated: Widget[]) => {
+      setWidgets(updated);
+    },
+    [setWidgets]
+  );
 
+  const handleRemoveWidget = useCallback(
+    (widgetId: string) => {
+      if (widgetId.startsWith("chat-child-")) {
+        const sessionId = widgetId.replace("chat-", "");
+        cancelSession(sessionId);
+      }
+      processUIAction({ action: "remove", widgetId });
+    },
+    [processUIAction, cancelSession]
+  );
+
+  const handleAddWidget = useCallback(
+    (widgetType: string) => {
+      const id = `${widgetType}-${Date.now()}`;
+      processUIAction({
+        action: "add",
+        widgetId: id,
+        widgetType,
+      });
+      setMenuOpen(false);
+    },
+    [processUIAction]
+  );
+
+  // Close menu on outside click
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, REFRESH_INTERVAL);
-    return () => clearInterval(id);
-  }, [refresh]);
+    if (!menuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen]);
 
-  // Refresh memories periodically
-  useEffect(() => {
-    refreshMemories();
-    const id = setInterval(refreshMemories, REFRESH_INTERVAL);
-    return () => clearInterval(id);
-  }, [refreshMemories]);
-
-  const toggleMemory = (id: string) => {
-    setSelectedMemoryIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const widgetTypes = getAllWidgetTypes();
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-6">
-      {/* Left column: chat (60%) + memory table (40%) stacked */}
-      <div className="flex-[2] min-w-0 flex flex-col gap-4">
-        <div className="flex-[3] min-h-0">
-          <ChatWindow
-            memories={memories}
-            selectedMemoryIds={selectedMemoryIds}
-          />
-        </div>
-        <div className="flex-[2] min-h-0">
-          <MemoryTable
-            memories={memories}
-            selectedIds={selectedMemoryIds}
-            onToggle={toggleMemory}
-            onDelete={(id) => {
-              deleteMemory(id);
-              setSelectedMemoryIds((prev) => {
-                const next = new Set(prev);
-                next.delete(id);
-                return next;
-              });
-            }}
-            onSave={saveMemory}
-          />
-        </div>
-      </div>
+    <div className="min-h-[calc(100vh-4rem)]">
+      <WidgetCanvas
+        widgets={widgets}
+        onLayoutChange={handleLayoutChange}
+        onRemoveWidget={handleRemoveWidget}
+      />
 
-      {/* Right column: stat cards */}
-      <div className="flex-1 flex flex-col gap-4">
-        <Card>
-          <h3 className="text-xs font-medium text-text/50 mb-1">
-            Agent Status
-          </h3>
-          <p className="text-lg font-semibold text-highlight capitalize">
-            {status}
-          </p>
-        </Card>
-
-        <Card>
-          <h3 className="text-xs font-medium text-text/50 mb-1">Sessions</h3>
-          <p className="text-lg font-semibold text-highlight">
-            {totals.sessionCount}
-          </p>
-        </Card>
-
-        <Card>
-          <h3 className="text-xs font-medium text-text/50 mb-1">
-            Tokens In / Out
-          </h3>
-          <p className="text-lg font-semibold text-highlight">
-            {totals.totalTokensIn.toLocaleString()} /{" "}
-            {totals.totalTokensOut.toLocaleString()}
-          </p>
-        </Card>
-
-        <Card>
-          <h3 className="text-xs font-medium text-text/50 mb-1">
-            Est. Total Cost
-          </h3>
-          <p className="text-lg font-semibold text-highlight">
-            $
-            {(
-              totals.totalTokensIn * 0.000003 +
-              totals.totalTokensOut * 0.000015
-            ).toFixed(6)}
-          </p>
-        </Card>
+      {/* Add Widget Button */}
+      <div ref={menuRef} className="fixed bottom-6 right-6 z-40">
+        {menuOpen && (
+          <div className="absolute bottom-14 right-0 w-52 bg-surface border border-primary/30 shadow-lg py-1 mb-2">
+            <div className="px-3 py-1.5 text-[10px] text-text/30 uppercase tracking-wider">
+              Add Widget
+            </div>
+            {widgetTypes.map((reg) => (
+              <button
+                key={reg.type}
+                onClick={() => handleAddWidget(reg.type)}
+                className="w-full text-left px-3 py-2 text-sm text-text/70 hover:bg-primary/20 hover:text-highlight transition-colors cursor-pointer"
+              >
+                {reg.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          className="w-10 h-10 bg-primary text-highlight border border-primary/40 hover:bg-secondary transition-colors cursor-pointer flex items-center justify-center text-xl font-light"
+        >
+          {menuOpen ? "\u00D7" : "+"}
+        </button>
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ export interface ServerTool {
   name: string;
   description: string;
   mode: "auto" | "manual";
+  overridden?: boolean;
 }
 
 export interface ServerStatus {

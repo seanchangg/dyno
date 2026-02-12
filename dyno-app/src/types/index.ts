@@ -1,3 +1,5 @@
+export * from "./widget";
+
 export type AgentStatus = "active" | "working" | "offline";
 
 export interface ChatSettings {
@@ -71,7 +73,10 @@ export type BuildEventType =
   | "proposal"
   | "execution_result"
   | "done"
-  | "error";
+  | "error"
+  | "session_created"
+  | "session_ended"
+  | "ui_mutation";
 
 export interface BuildEvent {
   type: BuildEventType;
@@ -87,6 +92,7 @@ export interface BuildEvent {
   tokensIn?: number;
   tokensOut?: number;
   message?: string;
+  sessionId?: string;
   timestamp: number;
 }
 
@@ -106,6 +112,10 @@ export interface ProposedAction {
   status: ProposalStatus;
   result?: string;
   error?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  costSoFar?: number;
+  iteration?: number;
 }
 
 export interface BuildPlanStep {

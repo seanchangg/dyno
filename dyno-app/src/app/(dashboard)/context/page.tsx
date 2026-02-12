@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import { useToast } from "@/components/ui/ToastProvider";
 
 interface ContextFile {
   filename: string;
@@ -15,6 +16,7 @@ export default function ContextPage() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetch("/api/context")
@@ -27,8 +29,8 @@ export default function ContextPage() {
           setContent(contextFiles[0].content);
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => toast("Failed to load context files", "error"));
+  }, [toast]);
 
   const handleFileSelect = (filename: string) => {
     const file = files.find((f) => f.filename === filename);
@@ -56,7 +58,7 @@ export default function ContextPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      // Handle error silently
+      toast("Failed to save context file", "error");
     }
     setSaving(false);
   };

@@ -44,6 +44,8 @@ export default function ProposedActionCard({
   const statusInfo = STATUS_LABELS[action.status] || STATUS_LABELS.pending;
   const isPending = action.status === "pending";
   const isModifyFile = action.tool === "modify_file";
+  const hasCostInfo =
+    action.tokensIn !== undefined || action.tokensOut !== undefined;
 
   const handleApprove = () => {
     if (isEditing && editedContent !== action.input.content) {
@@ -73,6 +75,24 @@ export default function ProposedActionCard({
           {statusInfo.text}
         </span>
       </div>
+
+      {/* Cost info */}
+      {hasCostInfo && isPending && (
+        <div className="flex items-center gap-4 text-xs text-text/40 mb-3 border-b border-primary/10 pb-2">
+          {action.iteration && (
+            <span>Iteration {action.iteration}</span>
+          )}
+          <span>
+            {(action.tokensIn ?? 0).toLocaleString()} in /{" "}
+            {(action.tokensOut ?? 0).toLocaleString()} out
+          </span>
+          {action.costSoFar !== undefined && (
+            <span className="ml-auto text-text/50">
+              Cost so far: ${action.costSoFar.toFixed(4)}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Content preview */}
       {isModifyFile && action.input.old_string && action.input.new_string ? (

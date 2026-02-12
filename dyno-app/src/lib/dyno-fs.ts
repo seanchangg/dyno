@@ -124,3 +124,25 @@ export async function clearChatHistory(): Promise<void> {
   const historyPath = path.join(dataDir, "logs", "chat-history.json");
   await fs.writeFile(historyPath, "[]", "utf-8");
 }
+
+export async function readLayout(): Promise<Record<string, unknown>[]> {
+  const dataDir = getDataDir();
+  const layoutPath = path.join(dataDir, "layout.json");
+  try {
+    const raw = await fs.readFile(layoutPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && Array.isArray(parsed.widgets)) return parsed.widgets;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export async function writeLayout(
+  widgets: Record<string, unknown>[]
+): Promise<void> {
+  const dataDir = await ensureDynoDir();
+  const layoutPath = path.join(dataDir, "layout.json");
+  await fs.writeFile(layoutPath, JSON.stringify(widgets, null, 2), "utf-8");
+}

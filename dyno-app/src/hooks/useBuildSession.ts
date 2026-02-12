@@ -230,6 +230,10 @@ export function useBuildSession() {
                 input: data.input,
                 displayTitle: data.displayTitle,
                 status: "pending",
+                tokensIn: data.tokensIn,
+                tokensOut: data.tokensOut,
+                costSoFar: data.costSoFar,
+                iteration: data.iteration,
               },
             ]);
             break;

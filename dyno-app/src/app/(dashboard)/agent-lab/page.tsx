@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import EventStream from "@/components/agent-lab/EventStream";
 import ProposedActionsList from "@/components/agent-lab/ProposedActionsList";
-import PermissionSettings from "@/components/agent-lab/PermissionSettings";
 import { useBuildSession } from "@/hooks/useBuildSession";
 import { useServerStatus } from "@/hooks/useServerStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { getDecryptedApiKey } from "@/lib/crypto";
 import AttachmentArea from "@/components/agent-lab/AttachmentArea";
-import type { ToolPermissions, Attachment } from "@/types";
+import { useToast } from "@/components/ui/ToastProvider";
+import { useTokenMetrics } from "@/hooks/useTokenMetrics";
+import type { PermissionMode, Attachment } from "@/types";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -25,17 +26,6 @@ function formatUptime(seconds: number): string {
 const COST_INPUT_PER_TOKEN = 3 / 1_000_000;
 const COST_OUTPUT_PER_TOKEN = 15 / 1_000_000;
 
-const DEFAULT_PERMISSIONS: ToolPermissions = {
-  write_file: "manual",
-  modify_file: "manual",
-  install_package: "manual",
-  read_file: "auto",
-  list_files: "auto",
-  take_screenshot: "auto",
-  read_upload: "auto",
-  fetch_url: "auto",
-};
-
 const COMPLEXITY_COLORS: Record<string, string> = {
   trivial: "bg-highlight/15 text-highlight/70",
   simple: "bg-highlight/15 text-highlight/70",
@@ -46,6 +36,7 @@ const COMPLEXITY_COLORS: Record<string, string> = {
 
 export default function AgentLabPage() {
   const { profile } = useAuth();
+  const { toast } = useToast();
   const server = useServerStatus();
   const {
     events,
@@ -67,12 +58,19 @@ export default function AgentLabPage() {
   const [prompt, setPrompt] = useState("");
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiKeyLoading, setApiKeyLoading] = useState(true);
-  const [permissions, setPermissions] =
-    useState<ToolPermissions>(DEFAULT_PERMISSIONS);
-  const [showPermissions, setShowPermissions] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
+
+  // Token estimation as user types
+  const { estimatedTokens, estimatedCost, withToolsTokens, withToolsCost } =
+    useTokenMetrics({
+      input: prompt,
+      messages: [],
+      maxHistoryMessages: 0,
+      includeSystemContext: true,
+      overhead: server.overhead,
+    });
 
   // Decrypt API key on mount
   useEffect(() => {
@@ -85,6 +83,35 @@ export default function AgentLabPage() {
     }
     loadKey();
   }, [profile]);
+
+  // Toggle a tool's permission and persist to server
+  const toggleToolMode = useCallback(
+    async (toolName: string, currentMode: "auto" | "manual") => {
+      const newMode: PermissionMode = currentMode === "auto" ? "manual" : "auto";
+      try {
+        await fetch("/api/tool-permissions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tool: toolName, mode: newMode }),
+        });
+        // Refresh server status so health endpoint returns updated modes
+        server.refresh();
+      } catch {
+        toast("Failed to update tool permission", "error");
+      }
+    },
+    [server, toast]
+  );
+
+  // Reset all overrides
+  const resetToolOverrides = useCallback(async () => {
+    try {
+      await fetch("/api/tool-permissions", { method: "DELETE" });
+      server.refresh();
+    } catch {
+      toast("Failed to reset permissions", "error");
+    }
+  }, [server, toast]);
 
   const handlePlan = () => {
     if (!prompt.trim() || !apiKey || isPlanning || isRunning) return;
@@ -147,13 +174,6 @@ export default function AgentLabPage() {
           </button>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => setShowPermissions(!showPermissions)}
-            className="text-xs px-3 py-1.5"
-          >
-            {showPermissions ? "Hide Permissions" : "Permissions"}
-          </Button>
           {(hasActivity || planResult) && !isRunning && (
             <Button
               variant="ghost"
@@ -165,16 +185,6 @@ export default function AgentLabPage() {
           )}
         </div>
       </div>
-
-      {/* Permission settings */}
-      {showPermissions && (
-        <div className="mb-4">
-          <PermissionSettings
-            permissions={permissions}
-            onChange={setPermissions}
-          />
-        </div>
-      )}
 
       {/* Warnings */}
       {!server.online && (
@@ -221,9 +231,32 @@ export default function AgentLabPage() {
             onRemove={(id) =>
               setAttachments((prev) => prev.filter((a) => a.id !== id))
             }
+            onError={(msg) => toast(msg, "error")}
             disabled={isRunning}
           />
         </div>
+
+        {/* Token estimation */}
+        {prompt.trim() && !isRunning && (
+          <div className="flex gap-4 text-xs text-text/40 mb-3">
+            <span>
+              Est. Input: {estimatedTokens.toLocaleString()}
+              {withToolsTokens > estimatedTokens && (
+                <span className="text-text/25">
+                  {" "}/ {withToolsTokens.toLocaleString()} w/ tools
+                </span>
+              )}
+            </span>
+            <span>
+              Est. Cost: ${estimatedCost.toFixed(6)}
+              {withToolsCost > estimatedCost && (
+                <span className="text-text/25">
+                  {" "}/ ${withToolsCost.toFixed(6)}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
 
         <div className="flex items-center gap-3">
           {!isRunning && !planResult && (
@@ -359,22 +392,32 @@ export default function AgentLabPage() {
         </Card>
       )}
 
-      {/* Available tools — live from server */}
+      {/* Available tools — live from server, with toggleable permissions */}
       <div className="bg-surface border border-primary/20 p-4 mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-semibold text-text/70">
             Available Tools
           </h2>
-          <span className="text-xs text-text/30">
-            {server.tools.length} tools
-          </span>
+          <div className="flex items-center gap-3">
+            {server.tools.some((t) => t.overridden) && (
+              <button
+                onClick={resetToolOverrides}
+                className="text-xs text-text/30 hover:text-text/60 transition-colors cursor-pointer"
+              >
+                Reset to defaults
+              </button>
+            )}
+            <span className="text-xs text-text/30">
+              {server.tools.length} tools
+            </span>
+          </div>
         </div>
         {server.tools.length === 0 && (
           <p className="text-xs text-text/30">
             {server.online ? "No tools loaded." : "Server offline."}
           </p>
         )}
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-1.5">
           {server.tools.map((tool) => (
             <div
               key={tool.name}
@@ -388,20 +431,23 @@ export default function AgentLabPage() {
                   {tool.description}
                 </span>
               </div>
-              <span
-                className={`text-xs shrink-0 ml-3 ${
-                  tool.mode === "auto" ? "text-highlight/60" : "text-text/40"
-                }`}
+              <button
+                onClick={() => toggleToolMode(tool.name, tool.mode)}
+                className={`text-xs font-medium px-2.5 py-0.5 shrink-0 ml-3 cursor-pointer transition-colors ${
+                  tool.mode === "auto"
+                    ? "bg-highlight/15 text-highlight/70 hover:bg-highlight/25"
+                    : "bg-primary/20 text-text/50 hover:bg-primary/30"
+                } ${tool.overridden ? "ring-1 ring-secondary/40" : ""}`}
               >
                 {tool.mode}
-              </span>
+              </button>
             </div>
           ))}
         </div>
         {server.tools.length > 0 && (
           <p className="text-xs text-text/25 mt-3">
-            Auto tools run without approval. Manual tools require your
-            confirmation before executing.
+            Click a tool&apos;s mode to toggle between auto and manual.
+            Auto tools run without approval.
           </p>
         )}
       </div>

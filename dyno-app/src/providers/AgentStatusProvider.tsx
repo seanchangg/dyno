@@ -49,9 +49,9 @@ export default function AgentStatusProvider({
         const data = await res.json();
         if (cancelled) return;
 
-        // If there are active sessions on the server, the agent is working.
+        // If there are active tasks (master processing a request), the agent is working.
         const derived: AgentStatus =
-          (data.activeSessions ?? 0) > 0 ? "working" : "active";
+          (data.activeTasks ?? 0) > 0 ? "working" : "active";
 
         // Only override the manual value once the server confirms the change.
         manualOverrideRef.current = null;

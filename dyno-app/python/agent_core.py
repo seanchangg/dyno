@@ -15,6 +15,13 @@ DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 DEFAULT_MAX_TOKENS = 8192
 DEFAULT_MAX_ITERATIONS = 15
 
+# Sonnet pricing for cost estimation
+COST_PER_INPUT_TOKEN = 3 / 1_000_000
+COST_PER_OUTPUT_TOKEN = 15 / 1_000_000
+
+# Max chars to store per tool result in conversation history (saves context tokens)
+TOOL_RESULT_HISTORY_LIMIT = 4000
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent  # dyno-app/
 DATA_DIR = PROJECT_ROOT / "data"
 CONFIG_PATH = DATA_DIR / "config" / "agent.json"
@@ -27,14 +34,19 @@ def load_config() -> dict:
         "max_iterations": DEFAULT_MAX_ITERATIONS,
         "max_tokens": DEFAULT_MAX_TOKENS,
         "permissions": {
-            "write_file": "manual",
-            "modify_file": "manual",
+            "write_file": "auto",
+            "modify_file": "auto",
             "install_package": "manual",
             "read_file": "auto",
             "list_files": "auto",
             "take_screenshot": "auto",
             "read_upload": "auto",
             "fetch_url": "auto",
+            "save_script": "auto",
+            "db_query": "auto",
+            "db_insert": "auto",
+            "db_update": "auto",
+            "db_delete": "manual",
         },
     }
     try:
@@ -51,27 +63,20 @@ def load_config() -> dict:
 
 TOOL_DESCRIPTIONS_APPENDIX = (
     "## Tool Usage\n"
-    "Your file tools (read_file, list_files, write_file, modify_file) operate on "
-    "your own source directory (python/). You can read and modify your own code, "
-    "including creating new tool skills in tools/.\n\n"
-    "### Your source layout\n"
-    "- `agent_core.py` — your agentic loop\n"
-    "- `ws_server.py` — WebSocket server\n"
-    "- `tools/` — your skill modules (file_ops.py, packages.py, screenshots.py, uploads.py, web.py)\n"
-    "- `tools/__init__.py` — aggregates all skills\n"
-    "- `tools/_common.py` — shared constants\n\n"
-    "### Other tools\n"
-    "- `take_screenshot`: Capture a webpage as PNG (saved to data/screenshots/)\n"
-    "- `read_upload`: Read user-uploaded files from data/uploads/\n"
-    "- `fetch_url`: Fetch and read content from a URL\n"
-    "- `install_package`: Install an npm package\n\n"
-    "### Memory tools\n"
-    "- `save_memory`: Save a sticky-note to remember across sessions (tag + content). Auto-approved. User ID is handled automatically.\n"
-    "- `recall_memories`: Search/list saved memories by tag or keyword. Auto-approved. User ID is handled automatically.\n"
-    "- `delete_memory`: Remove an outdated memory by tag. Requires approval. User ID is handled automatically.\n\n"
-    "Use memory tools to persist important context (user preferences, project notes, etc.) "
-    "instead of relying on conversation history. You do NOT need to provide or know the user ID — it is set automatically.\n\n"
-    "Write clean, working code. Be concise in your explanations."
+    "File tools operate on python/ (your code) and data/ (your config, context, scripts, logs).\n"
+    "Paths must start with `python/` or `data/` (e.g. `python/tools/new_skill.py`, `data/context/claude.md`).\n\n"
+    "### Database (direct Supabase access)\n"
+    "- `db_query`: SELECT with PostgREST filters. Always filter by user_id (except `profiles` where the column is `id`).\n"
+    "- `db_insert`: INSERT rows. Include user_id for user-scoped tables.\n"
+    "- `db_update`: UPDATE matching rows. Filters required.\n"
+    "- `db_delete`: DELETE matching rows. Filters required. Requires approval.\n"
+    "Tables: profiles (PK: id), agent_memories, agent_screenshots, token_usage, widget_layouts (PK: user_id).\n\n"
+    "### Web: web_search, browse_web, fetch_url — all auto.\n"
+    "### Memory: save_memory, recall_memories, delete_memory, append_memory, edit_memory, list_memory_tags.\n"
+    "### Execution: execute_code, save_script, run_script, list_scripts, delete_script.\n"
+    "### Orchestration: spawn_agent, list_children, get_session_status, get_child_details, send_to_session, terminate_child.\n"
+    "### Dashboard: get_dashboard_layout (read first!), ui_action (add/remove/update/move/resize/clear/reset). Grid: 12 cols, 60px rows.\n"
+    "Use `html` widget type for charts/graphs/interactive content — pass {html} for inline or write to data/widgets/ and use {src: '/api/widget-html/filename.html'}.\n"
 )
 
 
@@ -90,32 +95,63 @@ def get_system_prompt() -> str:
 
 
 class AgentCore:
-    def __init__(self, api_key: str, model: str | None = None):
+    def __init__(
+        self,
+        api_key: str,
+        model: str | None = None,
+        session_id: str = "master",
+        context_handlers: dict | None = None,
+        tools_override: list[dict] | None = None,
+        permission_overrides: dict[str, str] | None = None,
+    ):
         self.client = Anthropic(api_key=api_key)
         self.config = load_config()
         self.model = model or self.config["default_model"]
         self.max_tokens = self.config["max_tokens"]
         self.max_iterations = self.config["max_iterations"]
         self.permissions = self.config["permissions"]
+        self.session_id = session_id
+        self.context_handlers = context_handlers
+        self.tools_override = tools_override
+        self.permission_overrides = permission_overrides or {}
         self.messages: list[dict] = []
         self.total_tokens_in = 0
         self.total_tokens_out = 0
+        self._cancelled = False
 
     def is_auto_approved(self, tool_name: str) -> bool:
-        """Check if a tool is auto-approved based on config permissions."""
+        """Check if a tool is auto-approved.
+
+        Priority: session overrides > server defaults (READ_ONLY_TOOLS) > config.
+        """
+        # Session-level overrides from the frontend take top priority
+        if tool_name in self.permission_overrides:
+            return self.permission_overrides[tool_name] == "auto"
+        # Server defaults
         if tool_name in READ_ONLY_TOOLS:
             return True
         return self.permissions.get(tool_name, "manual") == "auto"
 
     async def execute_tool(self, tool_name: str, tool_input: dict) -> str:
-        """Execute a tool handler and return the result string."""
-        handler = TOOL_HANDLERS.get(tool_name)
+        """Execute a tool handler and return the result string.
+
+        Checks context_handlers first (session-scoped), then global TOOL_HANDLERS.
+        """
+        handler = None
+        if self.context_handlers:
+            handler = self.context_handlers.get(tool_name)
+        if not handler:
+            handler = TOOL_HANDLERS.get(tool_name)
         if not handler:
             return f"Error: Unknown tool: {tool_name}"
         try:
             return await handler(tool_input)
         except Exception as e:
             return f"Error executing {tool_name}: {str(e)}"
+
+    def cancel(self):
+        """Signal the agentic loop to stop at the next iteration."""
+        self._cancelled = True
 
     async def run_build(self, prompt: str, on_event, *, history: list[dict] | None = None, system_prompt: str | None = None):
         """
@@ -129,13 +165,25 @@ class AgentCore:
         Optional system_prompt: override the default system prompt.
         """
         self.messages = []
+        self._cancelled = False
         if history:
             self.messages.extend(history)
         self.messages.append({"role": "user", "content": prompt})
         if system_prompt is None:
             system_prompt = get_system_prompt()
 
+        active_tools = self.tools_override if self.tools_override is not None else AGENT_TOOLS
+
         for iteration in range(self.max_iterations):
+            # Early exit on cancel
+            if self._cancelled:
+                await on_event("done", {
+                    "summary": "Cancelled.",
+                    "tokensIn": self.total_tokens_in,
+                    "tokensOut": self.total_tokens_out,
+                })
+                return
+
             try:
                 # Run sync Anthropic call in a thread to avoid blocking the event loop
                 response = await asyncio.to_thread(
@@ -143,7 +191,7 @@ class AgentCore:
                     model=self.model,
                     max_tokens=self.max_tokens,
                     system=system_prompt,
-                    tools=AGENT_TOOLS,
+                    tools=active_tools,
                     messages=self.messages,
                 )
             except Exception as e:
@@ -171,13 +219,18 @@ class AgentCore:
 
             # If no tool use, we're done
             if response.stop_reason != "tool_use":
-                # Extract final text for summary
+                # Save final response to self.messages so callers can inspect it
+                serialized_content = []
                 final_text = ""
                 for block in response.content:
                     if block.type == "text":
+                        serialized_content.append({"type": "text", "text": block.text})
                         final_text += block.text
+                if serialized_content:
+                    self.messages.append({"role": "assistant", "content": serialized_content})
+
                 await on_event("done", {
-                    "summary": final_text[:200] if final_text else "Build complete.",
+                    "summary": final_text if final_text else "Build complete.",
                     "tokensIn": self.total_tokens_in,
                     "tokensOut": self.total_tokens_out,
                 })
@@ -209,7 +262,7 @@ class AgentCore:
                     return {
                         "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content": result,
+                        "content": result[:TOOL_RESULT_HISTORY_LIMIT],
                     }
 
                 auto_results = await asyncio.gather(
@@ -219,18 +272,20 @@ class AgentCore:
 
             # Process write tools sequentially (each needs approval)
             for block in approval_blocks:
-                await on_event("tool_call", {
-                    "id": block.id,
-                    "tool": block.name,
-                    "input": block.input,
-                })
-
                 # Build a display title
                 display_title = block.name
                 if "filename" in block.input:
                     display_title = f"{block.name}: {block.input['filename']}"
                 elif "package_name" in block.input:
                     display_title = f"{block.name}: {block.input['package_name']}"
+                elif "table" in block.input:
+                    display_title = f"{block.name}: {block.input['table']}"
+
+                # Calculate running cost
+                cost_so_far = (
+                    self.total_tokens_in * COST_PER_INPUT_TOKEN
+                    + self.total_tokens_out * COST_PER_OUTPUT_TOKEN
+                )
 
                 # Send proposal and wait for decision
                 decision = await on_event("proposal", {
@@ -238,6 +293,10 @@ class AgentCore:
                     "tool": block.name,
                     "input": block.input,
                     "displayTitle": display_title,
+                    "tokensIn": self.total_tokens_in,
+                    "tokensOut": self.total_tokens_out,
+                    "costSoFar": round(cost_so_far, 6),
+                    "iteration": iteration + 1,
                 })
 
                 if decision and decision.get("approved"):
@@ -251,7 +310,7 @@ class AgentCore:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content": result,
+                        "content": result[:TOOL_RESULT_HISTORY_LIMIT],
                     })
                 else:
                     await on_event("execution_result", {
@@ -262,7 +321,7 @@ class AgentCore:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content": "User denied this action.",
+                        "content": "User denied this action. Do not retry this action or ask why. Move on to the next step or finish the build with what you have.",
                         "is_error": True,
                     })
 

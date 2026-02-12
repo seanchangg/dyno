@@ -32,8 +32,7 @@ TOOL_DEFS = [
     {
         "name": "save_memory",
         "description": (
-            "Save a sticky-note memory to remember something across sessions. "
-            "Use a short, descriptive tag (e.g. 'user-preferences', 'project-goals', 'api-notes'). "
+            "Save a memory to persist across sessions. "
             "If a memory with the same tag exists, it will be updated. "
             "Always pass the userId from the system prompt."
         ),
@@ -46,11 +45,11 @@ TOOL_DEFS = [
                 },
                 "tag": {
                     "type": "string",
-                    "description": "Short label for this memory (e.g. 'user-name', 'project-stack', 'coding-style')"
+                    "description": "Label for this memory"
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to remember. Keep concise — bullet points work well."
+                    "description": "The content to remember"
                 }
             },
             "required": ["userId", "tag", "content"]
