@@ -1,14 +1,17 @@
 """Advanced memory management — append, edit, and organize memories.
 
-Uses the same Next.js API as memories.py (http://localhost:3000/api/memories).
+Uses the same Next.js API as memories.py for memory CRUD operations.
 """
 
 import json
+import os
 import urllib.request
 import urllib.parse
 import urllib.error
 
-API_BASE = "http://localhost:3000/api/memories"
+from ._common import FRONTEND_URL
+
+API_BASE = FRONTEND_URL + "/api/memories"
 
 TOOL_DEFS = [
     {

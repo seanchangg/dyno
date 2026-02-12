@@ -13,8 +13,9 @@ import type { ChatMessage, ChatSettings, ThinkingStep, UIAction } from "@/types"
 import { DEFAULT_CHAT_SETTINGS } from "@/types";
 import { addTokenUsage } from "@/lib/token-usage";
 import { useToast } from "@/components/ui/ToastProvider";
+import { useAgentStatus } from "@/hooks/useAgentStatus";
+import { WS_URL } from "@/lib/agent-config";
 
-const WS_URL = "ws://localhost:8765";
 const RECONNECT_DELAY_MS = 3000;
 
 export interface ChatProposal {
@@ -150,6 +151,9 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
   const { toast } = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
+  const { setStatus: setAgentStatus } = useAgentStatus();
+  const setAgentStatusRef = useRef(setAgentStatus);
+  setAgentStatusRef.current = setAgentStatus;
   const onUIActionRef = useRef(onUIAction);
   onUIActionRef.current = onUIAction;
   const [loaded, setLoaded] = React.useState(false);
@@ -277,6 +281,9 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
           tokensOut: data.tokensOut ?? prev.tokensOut,
         }));
         thinkingRefs.current.set(sessionId, []);
+        if (sessionId === "master") {
+          setAgentStatusRef.current("online");
+        }
         break;
       }
 
@@ -286,6 +293,9 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
           status: data.status,
           isLoading: data.status === "running",
         }));
+        if (data.status === "running") {
+          setAgentStatusRef.current("working");
+        }
         break;
 
       case "session_created":
@@ -373,6 +383,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
             ...prev,
             messages: [...prev.messages, assistantMessage],
             isLoading: false,
+            proposals: [],
             tokensIn: data.tokensIn ?? prev.tokensIn,
             tokensOut: data.tokensOut ?? prev.tokensOut,
           }));
@@ -381,9 +392,13 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
           store.updateSession(doneSessionId, (prev) => ({
             ...prev,
             isLoading: false,
+            proposals: [],
             tokensIn: data.tokensIn ?? prev.tokensIn,
             tokensOut: data.tokensOut ?? prev.tokensOut,
           }));
+        }
+        if (doneSessionId === "master") {
+          setAgentStatusRef.current("online");
         }
         break;
       }
@@ -396,6 +411,9 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
           proposals: [],
           status: "error",
         }));
+        if (sessionId === "master") {
+          setAgentStatusRef.current("online");
+        }
         break;
     }
   }, [store]);
@@ -414,6 +432,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
 
     ws.onopen = () => {
       console.log("[ws] Connected to agent server");
+      setAgentStatusRef.current("online");
     };
 
     ws.onmessage = handleWsMessage;
@@ -425,24 +444,27 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
     ws.onclose = () => {
       console.log("[ws] Disconnected from agent server");
       wsRef.current = null;
+      setAgentStatusRef.current("offline");
 
-      // Mark any in-flight master loading as done
+      // Mark any in-flight master loading as done and clear stale proposals
       const masterState = store.getSession("master");
-      if (masterState.isLoading) {
+      if (masterState.isLoading || masterState.proposals.length > 0) {
         store.updateSession("master", (prev) => ({
           ...prev,
           isLoading: false,
+          proposals: [],
         }));
       }
 
-      // Mark running child sessions as completed
+      // Mark running child sessions as completed and clear their proposals
       for (const sid of store.getAllSessionIds()) {
         if (sid === "master") continue;
         const s = store.getSession(sid);
-        if (s.isLoading || s.status === "running") {
+        if (s.isLoading || s.status === "running" || s.proposals.length > 0) {
           store.updateSession(sid, (prev) => ({
             ...prev,
             isLoading: false,
+            proposals: [],
             status: prev.status === "running" ? "completed" : prev.status,
           }));
         }
@@ -562,6 +584,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
         proposals: [],
       }));
       thinkingRefs.current.set("master", []);
+      setAgentStatusRef.current("working");
 
       // Check WS is connected
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -640,6 +663,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
     store.updateSession("master", (prev) => ({
       ...prev,
       messages: [],
+      proposals: [],
     }));
     fetch("/api/chat/history", { method: "DELETE" }).catch(() => {});
   }, [store]);

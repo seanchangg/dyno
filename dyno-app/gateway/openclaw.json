@@ -1,0 +1,27 @@
+{
+  "agent": {
+    "model": "claude-sonnet-4-5-20250929",
+    "maxTokens": 8192,
+    "maxIterations": 15
+  },
+  "server": {
+    "port": 18789,
+    "host": "localhost"
+  },
+  "channels": {
+    "dyno-dashboard": {
+      "enabled": true
+    }
+  },
+  "mcpServers": {
+    "dyno-legacy": {
+      "url": "ws://localhost:18790",
+      "description": "Legacy Python tools bridge"
+    }
+  },
+  "workspacePath": "./workspaces",
+  "skillsPaths": [
+    "./skills/bundled",
+    "./skills/managed"
+  ]
+}

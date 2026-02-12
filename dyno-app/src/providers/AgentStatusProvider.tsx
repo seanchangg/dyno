@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import type { AgentStatus } from "@/types";
+import { HEALTH_URL } from "@/lib/agent-config";
 
-const HEALTH_URL = "http://localhost:8765/health";
 const POLL_INTERVAL = 5000;
 
 interface AgentStatusContextValue {
@@ -12,7 +12,7 @@ interface AgentStatusContextValue {
 }
 
 const AgentStatusContext = createContext<AgentStatusContextValue>({
-  status: "active",
+  status: "offline",
   setStatus: () => {},
 });
 
@@ -25,18 +25,18 @@ export default function AgentStatusProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [status, setStatusState] = useState<AgentStatus>("active");
+  const [status, setStatusState] = useState<AgentStatus>("offline");
   const manualOverrideRef = useRef<AgentStatus | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Manual override: lets useBuildSession set "working" immediately without
-  // waiting for the next health poll.
+  // Manual override: lets the gateway WS or useBuildSession push status
+  // immediately without waiting for the next health poll.
   const setStatus = useCallback((s: AgentStatus) => {
     manualOverrideRef.current = s;
     setStatusState(s);
   }, []);
 
-  // Poll the bot server to derive status from its live state.
+  // Poll the gateway health endpoint to reconcile status.
   useEffect(() => {
     let cancelled = false;
 
@@ -49,11 +49,9 @@ export default function AgentStatusProvider({
         const data = await res.json();
         if (cancelled) return;
 
-        // If there are active tasks (master processing a request), the agent is working.
         const derived: AgentStatus =
-          (data.activeTasks ?? 0) > 0 ? "working" : "active";
+          (data.activeTasks ?? 0) > 0 ? "working" : "online";
 
-        // Only override the manual value once the server confirms the change.
         manualOverrideRef.current = null;
         setStatusState(derived);
       } catch {

@@ -7,30 +7,14 @@ Tables: profiles, agent_memories, agent_screenshots, token_usage, widget_layouts
 """
 
 import json
+import os
 import urllib.request
 import urllib.parse
 import urllib.error
-from pathlib import Path
 
-# Load Supabase credentials from .env.local at module load
-_ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env.local"
-_SUPABASE_URL = ""
-_SERVICE_ROLE_KEY = ""
-
-try:
-    for line in _ENV_PATH.read_text().splitlines():
-        line = line.strip()
-        if line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key == "NEXT_PUBLIC_SUPABASE_URL":
-            _SUPABASE_URL = value
-        elif key == "SUPABASE_SERVICE_ROLE_KEY":
-            _SERVICE_ROLE_KEY = value
-except FileNotFoundError:
-    pass
+# Load Supabase credentials from environment variables
+_SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
+_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 _VALID_TABLES = {"profiles", "agent_memories", "agent_screenshots", "token_usage", "widget_layouts"}
 

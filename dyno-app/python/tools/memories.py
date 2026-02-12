@@ -5,11 +5,14 @@ so they don't bloat the system prompt.
 """
 
 import json
+import os
 import urllib.request
 import urllib.parse
 import urllib.error
 
-API_BASE = "http://localhost:3000/api/memories"
+from ._common import FRONTEND_URL
+
+API_BASE = FRONTEND_URL + "/api/memories"
 
 # Set by ws_server before each session — the authenticated user's ID
 _current_user_id: str | None = None

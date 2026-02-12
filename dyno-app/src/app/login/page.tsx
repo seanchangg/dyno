@@ -16,7 +16,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center gap-3">
-          <DynoSprite status="active" size={56} />
+          <DynoSprite status="online" size={56} />
           <h1 className="text-2xl font-bold tracking-wide text-highlight">
             DYNO
           </h1>

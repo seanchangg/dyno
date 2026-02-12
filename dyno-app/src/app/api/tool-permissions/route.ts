@@ -1,71 +1,50 @@
+/**
+ * Tool permissions API — proxies to the Gateway's tool-permissions endpoint.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 
-const PERMISSIONS_PATH = path.resolve(
-  process.cwd(),
-  "data",
-  "config",
-  "tool-permissions.json"
-);
+const GATEWAY_HTTP_URL = process.env.NEXT_PUBLIC_GATEWAY_URL
+  ? process.env.NEXT_PUBLIC_GATEWAY_URL.replace("ws://", "http://").replace("wss://", "https://")
+  : "http://localhost:18789";
 
-async function ensureDir() {
-  await fs.mkdir(path.dirname(PERMISSIONS_PATH), { recursive: true });
-}
+const GATEWAY_PERMS_URL = `${GATEWAY_HTTP_URL}/api/tool-permissions`;
 
-async function readOverrides(): Promise<Record<string, string>> {
-  try {
-    const raw = await fs.readFile(PERMISSIONS_PATH, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-async function writeOverrides(overrides: Record<string, string>) {
-  await ensureDir();
-  await fs.writeFile(PERMISSIONS_PATH, JSON.stringify(overrides, null, 2), "utf-8");
-}
-
-/** GET /api/tool-permissions — return current overrides */
 export async function GET() {
-  const overrides = await readOverrides();
-  return NextResponse.json({ overrides });
+  try {
+    const res = await fetch(GATEWAY_PERMS_URL, { signal: AbortSignal.timeout(3000) });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  } catch {
+    return NextResponse.json({ error: "Gateway not available" }, { status: 503 });
+  }
 }
 
-/** POST /api/tool-permissions — set a single tool's mode or bulk update */
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-
-  // Bulk update: { overrides: { tool: mode, ... } }
-  if (body.overrides && typeof body.overrides === "object") {
-    await writeOverrides(body.overrides);
-    return NextResponse.json({ ok: true, overrides: body.overrides });
+  try {
+    const body = await req.json();
+    const res = await fetch(GATEWAY_PERMS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(3000),
+    });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  } catch {
+    return NextResponse.json({ error: "Gateway not available" }, { status: 503 });
   }
-
-  // Single update: { tool: "name", mode: "auto" | "manual" }
-  const { tool, mode } = body;
-  if (!tool || !mode || !["auto", "manual"].includes(mode)) {
-    return NextResponse.json(
-      { error: "tool and mode (auto|manual) are required" },
-      { status: 400 }
-    );
-  }
-
-  const overrides = await readOverrides();
-
-  if (mode === "__delete") {
-    delete overrides[tool];
-  } else {
-    overrides[tool] = mode;
-  }
-
-  await writeOverrides(overrides);
-  return NextResponse.json({ ok: true, overrides });
 }
 
-/** DELETE /api/tool-permissions — reset all overrides */
 export async function DELETE() {
-  await writeOverrides({});
-  return NextResponse.json({ ok: true });
+  try {
+    const res = await fetch(GATEWAY_PERMS_URL, {
+      method: "DELETE",
+      signal: AbortSignal.timeout(3000),
+    });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  } catch {
+    return NextResponse.json({ error: "Gateway not available" }, { status: 503 });
+  }
 }

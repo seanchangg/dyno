@@ -50,9 +50,9 @@ function ChatWidget({ sessionId = "master", memories, selectedMemoryIds }: ChatW
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }
-  }, [session.messages]);
+  }, [session.messages, session.proposals, session.isLoading]);
 
   const getApiKey = async (): Promise<string | null> => {
     if (!profile?.encrypted_api_key) {

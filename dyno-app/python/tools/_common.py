@@ -1,5 +1,6 @@
 """Shared constants and helpers for all tool modules."""
 
+import os
 from pathlib import Path
 
 # Everything lives inside the project: dyno-app/
@@ -16,6 +17,19 @@ ALLOWED_BASES = [TOOLS_DIR, DATA_DIR]
 
 # Directories the bot must never access
 EXCLUDED_DIRS = {"node_modules", ".git", ".next", "src", ".venv", "__pycache__"}
+
+# ── Cloud storage config ───────────────────────────────────────────────────
+# STORAGE_MODE: "local" (default, uses filesystem) or "cloud" (uses Supabase Storage)
+STORAGE_MODE = os.getenv("STORAGE_MODE", "local")
+
+# Supabase Storage bucket names
+WORKSPACE_BUCKET = "workspace"
+WIDGETS_BUCKET = "widgets"
+UPLOADS_BUCKET = "uploads"
+SCRIPTS_BUCKET = "scripts"
+
+# Frontend URL (for API calls to Next.js)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Ensure directories exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { HEALTH_URL } from "@/lib/agent-config";
 
-const HEALTH_URL = "http://localhost:8765/health";
 const POLL_INTERVAL = 5000; // 5 seconds
 
 export interface TokenOverhead {

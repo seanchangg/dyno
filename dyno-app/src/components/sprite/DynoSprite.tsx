@@ -19,7 +19,7 @@ export default function DynoSprite({ status, size = 64 }: DynoSpriteProps) {
     <div
       className={clsx(
         "relative flex items-center justify-center",
-        status === "active" && "animate-[pulse-glow_2s_ease-in-out_infinite]",
+        status === "online" && "animate-[pulse-glow_2s_ease-in-out_infinite]",
         status === "working" && "animate-[spin_3s_linear_infinite]",
         status === "offline" && "grayscale opacity-60"
       )}
@@ -43,7 +43,7 @@ export default function DynoSprite({ status, size = 64 }: DynoSpriteProps) {
         <circle cx={rightEyeX} cy={eyeY} r={eyeSize} fill="#A8D5BA" />
 
         {/* Mouth */}
-        {status === "active" && (
+        {status === "online" && (
           <path
             d={`M ${size * 0.35} ${mouthY} Q ${size * 0.5} ${mouthY + size * 0.12} ${size * 0.65} ${mouthY}`}
             stroke="#A8D5BA"

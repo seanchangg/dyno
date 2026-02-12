@@ -5,12 +5,29 @@ import path from "path";
 const UPLOADS_DIR = path.resolve(process.cwd(), "data", "uploads");
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+const STORAGE_MODE = process.env.STORAGE_MODE || "local";
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const UPLOADS_BUCKET = "uploads";
+
+function useCloud(): boolean {
+  return STORAGE_MODE === "cloud" && !!SUPABASE_URL && !!SERVICE_ROLE_KEY;
+}
+
+function supabaseHeaders(contentType?: string): Record<string, string> {
+  const h: Record<string, string> = {
+    apikey: SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+  };
+  if (contentType) h["Content-Type"] = contentType;
+  return h;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    await fs.mkdir(UPLOADS_DIR, { recursive: true });
-
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
+    const userId = formData.get("userId") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -31,6 +48,42 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (useCloud() && userId) {
+      // Upload to Supabase Storage
+      const storagePath = `${userId}/${safeName}`;
+      const buffer = Buffer.from(await file.arrayBuffer());
+
+      const res = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/${UPLOADS_BUCKET}/${storagePath}`,
+        {
+          method: "POST",
+          headers: {
+            ...supabaseHeaders(file.type || "application/octet-stream"),
+            "x-upsert": "true",
+          },
+          body: buffer,
+        }
+      );
+
+      if (!res.ok) {
+        const errBody = await res.text();
+        return NextResponse.json(
+          { error: `Storage upload failed: ${errBody}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        filename: safeName,
+        size: file.size,
+        uploaded: true,
+        storage: "cloud",
+      });
+    }
+
+    // Local mode
+    await fs.mkdir(UPLOADS_DIR, { recursive: true });
 
     const filePath = path.join(UPLOADS_DIR, safeName);
     const resolved = path.resolve(filePath);
@@ -54,7 +107,50 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const userId = request.nextUrl.searchParams.get("userId");
+
+  if (useCloud() && userId) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/list/${UPLOADS_BUCKET}`,
+        {
+          method: "POST",
+          headers: supabaseHeaders("application/json"),
+          body: JSON.stringify({
+            prefix: `${userId}/`,
+            limit: 1000,
+            offset: 0,
+            sortBy: { column: "created_at", order: "desc" },
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        return NextResponse.json([], { status: 200 });
+      }
+
+      const files = (await res.json()) as Array<{
+        name: string;
+        metadata?: { size?: number };
+        created_at?: string;
+      }>;
+
+      const results = files
+        .filter((f) => f.name && !f.name.endsWith("/"))
+        .map((f) => ({
+          filename: f.name,
+          size: f.metadata?.size || 0,
+          createdAt: f.created_at ? new Date(f.created_at).getTime() : 0,
+        }));
+
+      return NextResponse.json(results);
+    } catch {
+      return NextResponse.json([], { status: 200 });
+    }
+  }
+
+  // Local mode
   try {
     await fs.mkdir(UPLOADS_DIR, { recursive: true });
     const files = await fs.readdir(UPLOADS_DIR);
@@ -79,7 +175,7 @@ export async function GET() {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { filename } = await request.json();
+    const { filename, userId } = await request.json();
 
     if (!filename || typeof filename !== "string") {
       return NextResponse.json(
@@ -93,6 +189,29 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
     }
 
+    if (useCloud() && userId) {
+      const storagePath = `${userId}/${filename}`;
+      const res = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/${UPLOADS_BUCKET}`,
+        {
+          method: "DELETE",
+          headers: supabaseHeaders("application/json"),
+          body: JSON.stringify({ prefixes: [storagePath] }),
+        }
+      );
+
+      if (!res.ok) {
+        const errBody = await res.text();
+        return NextResponse.json(
+          { error: `Delete failed: ${errBody}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ deleted: true });
+    }
+
+    // Local mode
     const filePath = path.join(UPLOADS_DIR, filename);
     const resolved = path.resolve(filePath);
     if (!resolved.startsWith(path.resolve(UPLOADS_DIR))) {

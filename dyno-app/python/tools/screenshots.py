@@ -5,15 +5,16 @@ Storage through the Next.js API. Listing and reading also go through the API.
 """
 
 import json
+import os
 import re
 import time
 import urllib.request
 import urllib.error
 
-from ._common import SCREENSHOTS_DIR, safe_path
+from ._common import SCREENSHOTS_DIR, FRONTEND_URL, safe_path
 from .memories import _get_user_id
 
-API_BASE = "http://localhost:3000/api/screenshots"
+API_BASE = FRONTEND_URL + "/api/screenshots"
 
 TOOL_DEFS = [
     {

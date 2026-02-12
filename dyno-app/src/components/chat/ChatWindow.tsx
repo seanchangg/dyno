@@ -34,9 +34,9 @@ export default function ChatWindow({ memories, selectedMemoryIds }: ChatWindowPr
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }
-  }, [messages]);
+  }, [messages, proposals, isLoading]);
 
   const getApiKey = async (): Promise<string | null> => {
     if (!profile?.encrypted_api_key) {

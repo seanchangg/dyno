@@ -1,6 +1,6 @@
 export * from "./widget";
 
-export type AgentStatus = "active" | "working" | "offline";
+export type AgentStatus = "online" | "working" | "offline";
 
 export interface ChatSettings {
   maxHistoryMessages: number;

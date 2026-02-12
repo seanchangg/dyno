@@ -1,14 +1,15 @@
 "use client";
 
-import { LayoutDashboard, FlaskConical, FileText, Settings } from "lucide-react";
+import { LayoutDashboard, FlaskConical, FileText, Settings, Puzzle } from "lucide-react";
 import DynoSprite from "@/components/sprite/DynoSprite";
 import NavLink from "./NavLink";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { useAuth } from "@/hooks/useAuth";
 
-const navItems = [
+const baseNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/agent-lab", label: "Agent Lab", icon: FlaskConical },
+  { href: "/skills", label: "Skills", icon: Puzzle },
   { href: "/context", label: "Context", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -30,7 +31,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 flex flex-col gap-0.5 px-2">
-        {navItems.map((item) => (
+        {baseNavItems.map((item) => (
           <NavLink key={item.href} {...item} />
         ))}
       </nav>
