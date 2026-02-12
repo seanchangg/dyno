@@ -150,9 +150,12 @@ export class GatewayAgent {
     this.sendFn = fn;
   }
 
-  /** Set the user ID for this agent. */
+  /** Set the user ID for this agent. Also propagates to orchestration handler. */
   setUserId(userId: string) {
     this.userId = userId;
+    if (this.orchestration) {
+      this.orchestration.setUserId(userId);
+    }
   }
 
   /** Set the system prompt loaded from context. */

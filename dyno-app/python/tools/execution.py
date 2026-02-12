@@ -8,10 +8,11 @@ tasks.
 import asyncio
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 
-from ._common import DATA_DIR
+from ._common import DATA_DIR, STORAGE_MODE, SCRIPTS_BUCKET
 
 SCRIPTS_DIR = DATA_DIR / "scripts"
 SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -98,6 +99,17 @@ async def handle_execute_code(input_data: dict) -> str:
 
 # ── save_script: persist a reusable script ───────────────────────────────────
 
+def _make_header(name: str, description: str, language: str) -> str:
+    """Build a metadata header comment for a script."""
+    if language == "python":
+        return f'# Script: {name}\n# Description: {description}\n# Language: {language}\n\n'
+    elif language in ("javascript", "typescript"):
+        return f'// Script: {name}\n// Description: {description}\n// Language: {language}\n\n'
+    elif language == "bash":
+        return f'#!/bin/bash\n# Script: {name}\n# Description: {description}\n\n'
+    return ""
+
+
 async def handle_save_script(input_data: dict) -> str:
     """Save a named script for later re-use."""
     name = input_data.get("name", "").strip()
@@ -112,42 +124,59 @@ async def handle_save_script(input_data: dict) -> str:
     if not cfg:
         return f"Error: unsupported language '{language}'. Supported: {', '.join(_LANG_CONFIG)}"
 
-    # Sanitize name — alphanumeric, dashes, underscores only
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
     filename = f"{safe_name}{cfg['ext']}"
-    filepath = SCRIPTS_DIR / filename
+    header = _make_header(name, description, language)
+    full_content = header + code
 
-    # Add a header comment with metadata
-    if language == "python":
-        header = f'# Script: {name}\n# Description: {description}\n# Language: {language}\n\n'
-    elif language == "javascript" or language == "typescript":
-        header = f'// Script: {name}\n// Description: {description}\n// Language: {language}\n\n'
-    elif language == "bash":
-        header = f'#!/bin/bash\n# Script: {name}\n# Description: {description}\n\n'
-    else:
-        header = ""
-
-    filepath.write_text(header + code, encoding="utf-8")
-
-    # Also save metadata
-    meta_path = SCRIPTS_DIR / f"{safe_name}.meta.json"
     meta = {
         "name": name,
         "filename": filename,
         "language": language,
         "description": description,
         "created_at": time.time(),
-        "size_bytes": filepath.stat().st_size,
+        "size_bytes": len(full_content.encode("utf-8")),
     }
-    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-    return json.dumps({
-        "saved": True,
-        "name": name,
-        "filename": filename,
-        "path": str(filepath),
-        "size_bytes": meta["size_bytes"],
-    })
+    if STORAGE_MODE == "cloud":
+        user_id = input_data.get("userId", "")
+        if not user_id:
+            return "Error: userId is required for cloud storage operations"
+        try:
+            from . import storage_client
+            storage_client.upload_file(
+                SCRIPTS_BUCKET, user_id, filename,
+                full_content.encode("utf-8"),
+                "text/plain"
+            )
+            storage_client.upload_file(
+                SCRIPTS_BUCKET, user_id, f"{safe_name}.meta.json",
+                json.dumps(meta, indent=2).encode("utf-8"),
+                "application/json"
+            )
+            return json.dumps({
+                "saved": True,
+                "name": name,
+                "filename": filename,
+                "size_bytes": meta["size_bytes"],
+            })
+        except RuntimeError as e:
+            return f"Error: {e}"
+    else:
+        filepath = SCRIPTS_DIR / filename
+        filepath.write_text(full_content, encoding="utf-8")
+        meta["size_bytes"] = filepath.stat().st_size
+
+        meta_path = SCRIPTS_DIR / f"{safe_name}.meta.json"
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+        return json.dumps({
+            "saved": True,
+            "name": name,
+            "filename": filename,
+            "path": str(filepath),
+            "size_bytes": meta["size_bytes"],
+        })
 
 
 # ── run_script: execute a saved script ───────────────────────────────────────
@@ -163,20 +192,63 @@ async def handle_run_script(input_data: dict) -> str:
 
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
 
-    # Find the script file (check all extensions)
-    found = None
-    for cfg in _LANG_CONFIG.values():
-        candidate = SCRIPTS_DIR / f"{safe_name}{cfg['ext']}"
-        if candidate.exists():
-            found = candidate
-            break
+    if STORAGE_MODE == "cloud":
+        user_id = input_data.get("userId", "")
+        if not user_id:
+            return "Error: userId is required for cloud storage operations"
 
-    if not found:
-        return f"Error: script '{name}' not found. Use list_scripts to see available scripts."
+        # Find which extension exists in cloud
+        from . import storage_client
+        found_ext = None
+        found_content = None
+        for cfg in _LANG_CONFIG.values():
+            try:
+                data = storage_client.read_file(
+                    SCRIPTS_BUCKET, user_id, f"{safe_name}{cfg['ext']}"
+                )
+                found_ext = cfg["ext"]
+                found_content = data
+                break
+            except RuntimeError:
+                continue
 
-    result = await _run_file(str(found), timeout, args)
-    result["script"] = name
-    return json.dumps(result)
+        if not found_content:
+            return f"Error: script '{name}' not found. Use list_scripts to see available scripts."
+
+        # Write to temp file, execute, cleanup
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=found_ext, dir=str(SCRIPTS_DIR),
+                delete=False, mode="wb"
+            ) as tmp:
+                tmp.write(found_content)
+                tmp_path = tmp.name
+
+            result = await _run_file(tmp_path, timeout, args)
+            result["script"] = name
+            return json.dumps(result)
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+    else:
+        # Local mode
+        found = None
+        for cfg in _LANG_CONFIG.values():
+            candidate = SCRIPTS_DIR / f"{safe_name}{cfg['ext']}"
+            if candidate.exists():
+                found = candidate
+                break
+
+        if not found:
+            return f"Error: script '{name}' not found. Use list_scripts to see available scripts."
+
+        result = await _run_file(str(found), timeout, args)
+        result["script"] = name
+        return json.dumps(result)
 
 
 # ── list_scripts: show saved scripts ─────────────────────────────────────────
@@ -185,12 +257,31 @@ async def handle_list_scripts(input_data: dict) -> str:
     """List all saved scripts with metadata."""
     scripts = []
 
-    for meta_file in sorted(SCRIPTS_DIR.glob("*.meta.json")):
+    if STORAGE_MODE == "cloud":
+        user_id = input_data.get("userId", "")
+        if not user_id:
+            return "Error: userId is required for cloud storage operations"
         try:
-            meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            scripts.append(meta)
-        except (json.JSONDecodeError, OSError):
-            continue
+            from . import storage_client
+            files = storage_client.list_files(SCRIPTS_BUCKET, user_id, "")
+            for f in files:
+                name = f.get("name", "")
+                if name.endswith(".meta.json"):
+                    try:
+                        data = storage_client.read_file(SCRIPTS_BUCKET, user_id, name)
+                        meta = json.loads(data.decode("utf-8"))
+                        scripts.append(meta)
+                    except (RuntimeError, json.JSONDecodeError):
+                        continue
+        except RuntimeError as e:
+            return f"Error: {e}"
+    else:
+        for meta_file in sorted(SCRIPTS_DIR.glob("*.meta.json")):
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                scripts.append(meta)
+            except (json.JSONDecodeError, OSError):
+                continue
 
     if not scripts:
         return "No saved scripts yet. Use save_script to create one."
@@ -213,18 +304,41 @@ async def handle_delete_script(input_data: dict) -> str:
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
     deleted = []
 
-    # Remove script file (any extension)
-    for cfg in _LANG_CONFIG.values():
-        candidate = SCRIPTS_DIR / f"{safe_name}{cfg['ext']}"
-        if candidate.exists():
-            candidate.unlink()
-            deleted.append(candidate.name)
+    if STORAGE_MODE == "cloud":
+        user_id = input_data.get("userId", "")
+        if not user_id:
+            return "Error: userId is required for cloud storage operations"
 
-    # Remove metadata
-    meta_path = SCRIPTS_DIR / f"{safe_name}.meta.json"
-    if meta_path.exists():
-        meta_path.unlink()
-        deleted.append(meta_path.name)
+        from . import storage_client
+        # Remove script file (any extension)
+        for cfg in _LANG_CONFIG.values():
+            try:
+                storage_client.delete_file(
+                    SCRIPTS_BUCKET, user_id, f"{safe_name}{cfg['ext']}"
+                )
+                deleted.append(f"{safe_name}{cfg['ext']}")
+            except RuntimeError:
+                pass
+
+        # Remove metadata
+        try:
+            storage_client.delete_file(
+                SCRIPTS_BUCKET, user_id, f"{safe_name}.meta.json"
+            )
+            deleted.append(f"{safe_name}.meta.json")
+        except RuntimeError:
+            pass
+    else:
+        for cfg in _LANG_CONFIG.values():
+            candidate = SCRIPTS_DIR / f"{safe_name}{cfg['ext']}"
+            if candidate.exists():
+                candidate.unlink()
+                deleted.append(candidate.name)
+
+        meta_path = SCRIPTS_DIR / f"{safe_name}.meta.json"
+        if meta_path.exists():
+            meta_path.unlink()
+            deleted.append(meta_path.name)
 
     if not deleted:
         return f"Error: script '{name}' not found"

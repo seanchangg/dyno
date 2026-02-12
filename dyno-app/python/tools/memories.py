@@ -62,8 +62,9 @@ TOOL_DEFS = [
         "name": "recall_memories",
         "description": (
             "Search and retrieve saved memories. "
-            "Use with no arguments to list all memories, "
-            "with 'tag' to get a specific one, or with 'query' to search content. "
+            "Call with no tag/query to see available tags. "
+            "Call with 'tag' to get a specific memory's full content, "
+            "or with 'query' to search across memory content. "
             "Always pass the userId from the system prompt."
         ),
         "input_schema": {
@@ -164,6 +165,11 @@ async def handle_recall_memories(input_data: dict) -> str:
                 if query:
                     return f"No memories matching '{query}'."
                 return "No memories saved yet."
+
+            # No tag/query: return lightweight tag list only
+            if not tag and not query:
+                tags = [m["tag"] for m in memories]
+                return "Available tags: " + ", ".join(tags)
 
             lines = []
             for m in memories:

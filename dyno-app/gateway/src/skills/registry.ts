@@ -10,6 +10,26 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { SkillLoader, type LoadedSkill, type SkillMetadata } from "./loader.js";
 
+// ── Cloud mode restrictions (injected into system prompt) ─────────────────────
+
+const CLOUD_MODE_RESTRICTIONS = `<cloud_mode_restrictions>
+You are running in CLOUD MODE. The following restrictions apply:
+
+## Unavailable Tools
+- \`install_package\` — DOES NOT EXIST. Do not attempt to use it. You cannot install packages.
+
+## Restricted Tools
+- \`write_file\` — Can ONLY write to \`workspace/\` paths. Cannot write to \`python/\` (source code is read-only). Cannot write to \`workspace/skills/\` (use skill tools instead).
+- \`modify_file\` — Same restrictions as write_file. Cannot modify \`python/\` source code or skill files.
+
+## What To Use Instead
+- To manage skills: use \`create_skill\`, \`update_skill\`, \`read_skill\`, \`list_workspace_skills\`, \`delete_skill\`
+- To store data files: use \`write_file\` with \`workspace/\` paths (e.g. \`workspace/data/config.json\`)
+- To read your own source code: use \`read_file\` with \`python/\` paths (read-only)
+
+Do NOT attempt to write to python/, modify your own source code, or install packages. These operations will fail.
+</cloud_mode_restrictions>`;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface UserSkillState {
@@ -88,9 +108,9 @@ export class SkillRegistry {
   /**
    * Get the active skills for a user's system prompt.
    * Includes bundled skills (always active) + user-installed skills
-   * + workspace skills.
+   * + workspace skills (from local dir or Supabase).
    */
-  getActiveSkills(userId: string, workspaceSkillsPath?: string): LoadedSkill[] {
+  async getActiveSkills(userId: string, workspaceSkillsPath?: string): Promise<LoadedSkill[]> {
     const state = this.getUserState(userId);
     const active: LoadedSkill[] = [];
 
@@ -103,10 +123,24 @@ export class SkillRegistry {
       }
     }
 
-    // Load workspace skills if path provided
+    // Load workspace skills from local dir if path provided
     if (workspaceSkillsPath) {
       const workspaceSkills = this.loader.loadWorkspaceSkills(workspaceSkillsPath);
       active.push(...workspaceSkills);
+    }
+
+    // Load workspace skills from Supabase (cloud mode)
+    const storageMode = process.env.STORAGE_MODE || "local";
+    if (storageMode === "cloud") {
+      try {
+        const cloudSkills = await this.loader.loadFromSupabase(userId);
+        if (cloudSkills.length > 0) {
+          console.log(`[skills] Loaded ${cloudSkills.length} workspace skills from Supabase for ${userId}`);
+          active.push(...cloudSkills);
+        }
+      } catch (err) {
+        console.warn(`[skills] Failed to load cloud skills for ${userId}:`, err);
+      }
     }
 
     return active;
@@ -114,10 +148,18 @@ export class SkillRegistry {
 
   /**
    * Generate the skills XML block for a user's system prompt.
+   * In cloud mode, appends restrictions so the agent knows what's off-limits.
    */
-  getSkillsPrompt(userId: string, workspaceSkillsPath?: string): string {
-    const active = this.getActiveSkills(userId, workspaceSkillsPath);
-    return SkillLoader.formatForSystemPrompt(active);
+  async getSkillsPrompt(userId: string, workspaceSkillsPath?: string): Promise<string> {
+    const active = await this.getActiveSkills(userId, workspaceSkillsPath);
+    let prompt = SkillLoader.formatForSystemPrompt(active);
+
+    const storageMode = process.env.STORAGE_MODE || "local";
+    if (storageMode === "cloud") {
+      prompt += "\n\n" + CLOUD_MODE_RESTRICTIONS;
+    }
+
+    return prompt;
   }
 
   // ── Persistence ──────────────────────────────────────────────────────────

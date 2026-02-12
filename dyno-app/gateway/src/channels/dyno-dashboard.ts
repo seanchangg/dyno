@@ -57,9 +57,10 @@ export class DynoDashboardChannel {
 
   /** Handle an inbound message from the Dyno frontend. */
   async handleMessage(msg: DynoInboundMessage): Promise<void> {
-    // Track userId from any message
+    // Track userId from any message and propagate to agent for tool injection
     if (msg.userId) {
       this.userId = msg.userId;
+      this.agent.setUserId(msg.userId);
     }
 
     switch (msg.type) {

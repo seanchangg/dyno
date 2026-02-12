@@ -120,9 +120,88 @@ export class SkillLoader {
     return [...bundled, ...managed];
   }
 
-  /** Load skills from a user's workspace skills directory. */
+  /** Load skills from a user's workspace skills directory (local mode). */
   loadWorkspaceSkills(workspaceSkillsPath: string): LoadedSkill[] {
     return this.loadFromDir(workspaceSkillsPath, "workspace");
+  }
+
+  /**
+   * Load workspace skills from Supabase Storage (cloud mode).
+   * Fetches skill.md files from the workspace bucket under {userId}/skills/.
+   */
+  async loadFromSupabase(userId: string): Promise<LoadedSkill[]> {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      console.warn("[skills] Supabase not configured, skipping cloud skill loading");
+      return [];
+    }
+
+    const skills: LoadedSkill[] = [];
+
+    try {
+      // List files in workspace/{userId}/skills/
+      const listUrl = `${supabaseUrl}/storage/v1/object/list/workspace`;
+      const listResp = await fetch(listUrl, {
+        method: "POST",
+        headers: {
+          "apikey": serviceKey,
+          "Authorization": `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prefix: `${userId}/skills/`,
+          limit: 100,
+          offset: 0,
+          sortBy: { column: "name", order: "asc" },
+        }),
+      });
+
+      if (!listResp.ok) {
+        console.warn(`[skills] Supabase list failed (${listResp.status})`);
+        return [];
+      }
+
+      const files: Array<{ name: string }> = await listResp.json();
+      const mdFiles = files.filter((f) => f.name.endsWith(".md"));
+
+      for (const file of mdFiles) {
+        try {
+          const fileUrl = `${supabaseUrl}/storage/v1/object/workspace/${userId}/skills/${file.name}`;
+          const fileResp = await fetch(fileUrl, {
+            headers: {
+              "apikey": serviceKey,
+              "Authorization": `Bearer ${serviceKey}`,
+            },
+          });
+
+          if (!fileResp.ok) continue;
+
+          const raw = await fileResp.text();
+          const { metadata, content } = parseFrontmatter(raw);
+
+          const id = (metadata.id as string) || file.name.replace(/\.md$/, "");
+          skills.push({
+            id,
+            name: (metadata.name as string) || id,
+            description: (metadata.description as string) || "",
+            version: (metadata.version as string) || "1.0.0",
+            author: (metadata.author as string) || "user",
+            tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+            tier: "workspace",
+            filePath: `supabase://workspace/${userId}/skills/${file.name}`,
+            content: content.trim(),
+          });
+        } catch (err) {
+          console.warn(`[skills] Error loading cloud skill ${file.name}: ${err}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[skills] Error listing cloud skills: ${err}`);
+    }
+
+    return skills;
   }
 
   /**

@@ -1,10 +1,15 @@
-"""Package installation tool: install_package."""
+"""Package installation tool: install_package.
+
+Disabled entirely in cloud mode — users share the server, so installing
+packages is unsafe. In local/dev mode, works as before.
+"""
 
 import re
 import subprocess
 from pathlib import Path
+from ._common import STORAGE_MODE
 
-TOOL_DEFS = [
+_TOOL_DEFS = [
     {
         "name": "install_package",
         "description": "Install an npm package in the dyno-app directory.",
@@ -20,6 +25,9 @@ TOOL_DEFS = [
         }
     },
 ]
+
+# In cloud mode, don't register the tool at all
+TOOL_DEFS = _TOOL_DEFS if STORAGE_MODE != "cloud" else []
 
 READ_ONLY: set[str] = set()
 

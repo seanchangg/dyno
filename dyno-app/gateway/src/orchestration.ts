@@ -254,6 +254,11 @@ export class OrchestrationHandler {
     this.executeLegacyTool = opts.executeLegacyTool;
   }
 
+  /** Update the userId (called when it arrives late, e.g. from message). */
+  setUserId(userId: string) {
+    this.userId = userId;
+  }
+
   /** Check if a tool name is an orchestration tool. */
   isOrchestrationTool(name: string): boolean {
     return ORCHESTRATION_TOOL_NAMES.has(name);

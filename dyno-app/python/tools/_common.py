@@ -5,6 +5,21 @@ from pathlib import Path
 
 # Everything lives inside the project: dyno-app/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # dyno-app/
+
+# ── Load .env.local into os.environ (won't override existing env vars) ─────
+_ENV_LOCAL_PATH = PROJECT_ROOT / ".env.local"
+try:
+    for _line in _ENV_LOCAL_PATH.read_text().splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _key, _, _val = _line.partition("=")
+        _key = _key.strip()
+        _val = _val.strip().strip('"').strip("'")
+        if _key not in os.environ:
+            os.environ[_key] = _val
+except FileNotFoundError:
+    pass
 DATA_DIR = PROJECT_ROOT / "data"
 TOOLS_DIR = Path(__file__).resolve().parent.parent  # python/
 SCREENSHOTS_DIR = DATA_DIR / "screenshots"

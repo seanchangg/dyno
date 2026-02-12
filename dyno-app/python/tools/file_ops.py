@@ -16,6 +16,39 @@ from ._common import (
     STORAGE_MODE, WORKSPACE_BUCKET, WIDGETS_BUCKET,
 )
 
+# ── Cloud write guards ────────────────────────────────────────────────────────
+
+def _cloud_write_blocked(filename: str) -> str | None:
+    """In cloud mode, check if a write should be blocked.
+
+    Returns an error message string if blocked, None if allowed.
+    """
+    if STORAGE_MODE != "cloud":
+        return None
+
+    # Block writes to source code (python/) in cloud mode
+    if filename.startswith("python/"):
+        return (
+            "Error: Writing to python/ is disabled in cloud mode. "
+            "Agent source code is read-only in cloud deployments."
+        )
+
+    # Block writes to workspace/skills/*.md — must use skill_manager tools
+    if filename.startswith("workspace/") and "/skills/" in filename and filename.endswith(".md"):
+        return (
+            "Error: Cannot write skill files directly. "
+            "Use create_skill or update_skill instead."
+        )
+
+    # In cloud mode, only workspace/ paths are writable
+    if not filename.startswith("workspace/"):
+        return (
+            "Error: In cloud mode, only workspace/ paths are writable. "
+            f"Cannot write to: {filename}"
+        )
+
+    return None
+
 TOOL_DEFS = [
     {
         "name": "read_file",
@@ -56,8 +89,10 @@ TOOL_DEFS = [
         "name": "write_file",
         "description": (
             "Write a new file or overwrite an existing file. In cloud mode, write to "
-            "'workspace/' paths (e.g. 'workspace/skills/my-skill.md', 'workspace/data/config.json', "
-            "'workspace/widgets/chart.html'). In local mode, write to python/ or data/."
+            "'workspace/' paths (e.g. 'workspace/data/config.json', "
+            "'workspace/widgets/chart.html'). python/ is read-only in cloud mode. "
+            "For skill files, use create_skill/update_skill instead. "
+            "In local mode, write to python/ or data/."
         ),
         "input_schema": {
             "type": "object",
@@ -78,7 +113,9 @@ TOOL_DEFS = [
         "name": "modify_file",
         "description": (
             "Modify an existing file by replacing a specific string with a new string. "
-            "Works with workspace/, python/, and data/ paths."
+            "In cloud mode, only workspace/ paths are writable (python/ is read-only). "
+            "For skill files, use update_skill instead. "
+            "In local mode, works with python/ and data/ paths too."
         ),
         "input_schema": {
             "type": "object",
@@ -250,6 +287,11 @@ async def handle_write_file(input_data: dict) -> str:
     filename = input_data["filename"]
     content = input_data["content"]
 
+    # Cloud write guards
+    blocked = _cloud_write_blocked(filename)
+    if blocked:
+        return blocked
+
     # Cloud mode for workspace/ paths
     if _is_cloud_path(filename):
         user_id = input_data.get("userId", "")
@@ -295,6 +337,11 @@ async def handle_modify_file(input_data: dict) -> str:
     filename = input_data["filename"]
     old_string = input_data["old_string"]
     new_string = input_data["new_string"]
+
+    # Cloud write guards
+    blocked = _cloud_write_blocked(filename)
+    if blocked:
+        return blocked
 
     # Cloud mode for workspace/ paths
     if _is_cloud_path(filename):

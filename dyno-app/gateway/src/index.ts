@@ -308,12 +308,15 @@ async function main() {
       agent.setSystemPrompt(sharedSystemPrompt);
     }
 
-    // Set skills prompt (only injected in Phase 2 / build, not Phase 1)
+    // Set skills prompt (async — loads from Supabase in cloud mode)
     const effectiveUserId = authenticatedUserId || "default";
-    const skillsPrompt = skillRegistry.getSkillsPrompt(effectiveUserId);
-    if (skillsPrompt) {
-      agent.setSkillsPrompt(skillsPrompt);
-    }
+    skillRegistry.getSkillsPrompt(effectiveUserId).then((skillsPrompt) => {
+      if (skillsPrompt) {
+        agent.setSkillsPrompt(skillsPrompt);
+      }
+    }).catch((err) => {
+      console.warn(`[gateway] Failed to load skills prompt: ${err}`);
+    });
 
     // Wire tool permission overrides into agent
     agent.setToolPermissions(toolPermissions);

@@ -186,7 +186,7 @@ async def handle_db_query(input_data: dict) -> str:
         return err
 
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
-        return "Error: Supabase credentials not configured in .env.local"
+        return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
     filters = input_data.get("filters")
     select = input_data.get("select")
@@ -214,7 +214,7 @@ async def handle_db_insert(input_data: dict) -> str:
         return err
 
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
-        return "Error: Supabase credentials not configured in .env.local"
+        return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
     rows = input_data.get("rows", [])
     if not rows:
@@ -241,7 +241,7 @@ async def handle_db_update(input_data: dict) -> str:
         return err
 
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
-        return "Error: Supabase credentials not configured in .env.local"
+        return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
     filters = input_data.get("filters")
     if not filters:
@@ -274,7 +274,7 @@ async def handle_db_delete(input_data: dict) -> str:
         return err
 
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
-        return "Error: Supabase credentials not configured in .env.local"
+        return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
     filters = input_data.get("filters")
     if not filters:
