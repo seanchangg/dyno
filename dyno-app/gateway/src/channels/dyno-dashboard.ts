@@ -413,10 +413,36 @@ export class DynoDashboardChannel {
   /**
    * Swap the underlying WebSocket (e.g. after a page reload reconnects).
    * In-flight work keeps running — sends now go to the new socket.
-   * Re-sends any pending proposals so the new frontend can approve/deny them.
+   * Re-sends active child sessions and pending proposals so the frontend
+   * can rebuild its state.
    */
   replaceWebSocket(ws: WebSocket) {
     this.ws = ws;
+
+    // Re-send active child sessions so frontend recreates widgets
+    const orch = this.agent.getOrchestration?.();
+    if (orch) {
+      for (const [id, child] of orch.getChildren()) {
+        this.send({
+          type: "session_created",
+          sessionId: id,
+          model: child.model,
+          prompt: child.prompt,
+        });
+        // If child is already done, also send session_ended
+        if (child.status !== "running") {
+          this.send({
+            type: "session_ended",
+            sessionId: id,
+            status: child.status,
+            result: child.result,
+            tokensIn: child.tokensIn,
+            tokensOut: child.tokensOut,
+            model: child.model,
+          });
+        }
+      }
+    }
 
     // Re-send pending proposals to the new frontend so user can approve/deny
     for (const [, pending] of this.pendingApprovals) {

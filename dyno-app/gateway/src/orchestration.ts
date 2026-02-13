@@ -466,12 +466,14 @@ export class OrchestrationHandler {
         return;
       }
 
+      const isOpus = child.model.includes("opus");
       const response = await client.messages.create({
         model: child.model,
         max_tokens: 8192,
         system: cachedSystem,
         tools: childTools,
         messages: child.messages,
+        ...(isOpus ? { output_config: { effort: "medium" } } : {}),
       });
 
       if (response.usage) {
@@ -522,9 +524,30 @@ export class OrchestrationHandler {
       for (const block of toolBlocks) {
         await childOnEvent("tool_call", { id: block.id, tool: block.name, input: block.input as Record<string, unknown> });
         // Route dashboard tools through orchestration, everything else through legacy bridge
-        const result = CHILD_ALLOWED_ORCHESTRATION.has(block.name)
-          ? await this.execute(block.name, block.input as Record<string, unknown>, apiKey, childOnEvent)
-          : await this.executeLegacyTool(block.name, block.input as Record<string, unknown>);
+        const toolStart = Date.now();
+        let toolError: string | undefined;
+        let result: string;
+        try {
+          result = CHILD_ALLOWED_ORCHESTRATION.has(block.name)
+            ? await this.execute(block.name, block.input as Record<string, unknown>, apiKey, childOnEvent)
+            : await this.executeLegacyTool(block.name, block.input as Record<string, unknown>);
+        } catch (err) {
+          toolError = String(err).slice(0, 500);
+          result = `Error: ${toolError}`;
+        }
+        const toolDuration = Date.now() - toolStart;
+        // Log child tool call to activity logger
+        if (this.activityLogger && this.userId) {
+          this.activityLogger.logToolCall({
+            userId: this.userId,
+            sessionId: child.id,
+            toolName: block.name,
+            toolParams: block.input as Record<string, unknown>,
+            success: !toolError,
+            durationMs: toolDuration,
+            errorMessage: toolError,
+          });
+        }
         await childOnEvent("tool_result", { id: block.id, tool: block.name, result: result.slice(0, 4000) });
         toolResults.push({
           type: "tool_result",

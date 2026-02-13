@@ -468,16 +468,15 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
         }));
       }
 
-      // Mark running child sessions as completed and clear their proposals
+      // Clear proposals for child sessions but don't change status —
+      // children keep running on the gateway and will be restored on reconnect.
       for (const sid of store.getAllSessionIds()) {
         if (sid === "master") continue;
         const s = store.getSession(sid);
-        if (s.isLoading || s.status === "running" || s.proposals.length > 0) {
+        if (s.proposals.length > 0) {
           store.updateSession(sid, (prev) => ({
             ...prev,
-            isLoading: false,
             proposals: [],
-            status: prev.status === "running" ? "completed" : prev.status,
           }));
         }
       }

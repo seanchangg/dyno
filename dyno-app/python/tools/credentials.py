@@ -12,9 +12,8 @@ import urllib.error
 
 from ._common import FRONTEND_URL
 
-# Gateway URL for credential retrieval (internal calls)
-_GATEWAY_URL = os.getenv("NEXT_PUBLIC_GATEWAY_URL", "ws://localhost:18789")
-_GATEWAY_HTTP = _GATEWAY_URL.replace("ws://", "http://").replace("wss://", "https://")
+# Gateway URL for credential retrieval (internal calls — always localhost)
+_GATEWAY_HTTP = os.getenv("GATEWAY_INTERNAL_URL", "http://localhost:18789")
 
 TOOL_DEFS = [
     {

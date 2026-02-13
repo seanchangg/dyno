@@ -193,6 +193,11 @@ export class GatewayAgent {
     }
   }
 
+  /** Get the orchestration handler (for session state access). */
+  getOrchestration(): OrchestrationHandler | null {
+    return this.orchestration;
+  }
+
   /** Initialize orchestration handler (call after setting bridge, send, userId). */
   initOrchestration() {
     if (!this.sendFn) return;
