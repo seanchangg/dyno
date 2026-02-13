@@ -17,6 +17,8 @@ import { createClient } from "@supabase/supabase-js";
 const PUBLIC_API_PREFIXES = [
   "/api/auth/",          // Login / signup
   "/api/webhook/",       // Public webhook ingestion (HMAC auth)
+  "/api/widget-html/",   // Served in sandboxed iframes (can't attach JWT)
+  "/api/widget-exec",    // Called from within widget iframes
 ];
 
 export async function middleware(req: NextRequest) {
