@@ -1,17 +1,19 @@
 """Screenshot tools: take_screenshot, list_screenshots, read_screenshot.
 
-Screenshots are captured locally via Playwright, then uploaded to Supabase
-Storage through the Next.js API. Listing and reading also go through the API.
+Screenshots are captured locally via Playwright as a temp file, then uploaded
+to Supabase Storage through the Next.js API. The local file is deleted after
+upload. All listing and reading goes through the Supabase-backed API.
 """
 
 import json
 import os
 import re
+import tempfile
 import time
 import urllib.request
 import urllib.error
 
-from ._common import SCREENSHOTS_DIR, FRONTEND_URL, safe_path
+from ._common import FRONTEND_URL, service_headers
 from .memories import _get_user_id
 
 API_BASE = FRONTEND_URL + "/api/screenshots"
@@ -74,6 +76,10 @@ READ_ONLY = {"take_screenshot", "list_screenshots", "read_screenshot"}
 
 async def handle_take_screenshot(input_data: dict) -> str:
     url = input_data["url"]
+    user_id = _get_user_id(input_data)
+    if not user_id:
+        return "Error: userId is required for screenshot upload"
+
     try:
         from playwright.async_api import async_playwright
     except ImportError:
@@ -82,36 +88,32 @@ async def handle_take_screenshot(input_data: dict) -> str:
     slug = re.sub(r'[^a-zA-Z0-9]+', '-', url.split("//")[-1])[:50].strip('-')
     ts = int(time.time())
     filename = f"{slug}-{ts}.png"
-    filepath = SCREENSHOTS_DIR / filename
+
+    # Capture to a temp file, upload to Supabase, then clean up
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmppath = tmp.name
 
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             page = await browser.new_page(viewport={"width": 1280, "height": 720})
             await page.goto(url, timeout=15000, wait_until="networkidle")
-            await page.screenshot(path=str(filepath))
+            await page.screenshot(path=tmppath)
             await browser.close()
 
-        size = filepath.stat().st_size
+        size = os.path.getsize(tmppath)
+        public_url = _upload_to_api(tmppath, filename, user_id)
+        return f"Screenshot saved: {filename} ({size} bytes)\nPublic URL: {public_url}"
     except Exception as e:
         return f"Error taking screenshot: {str(e)}"
-
-    # Upload to Supabase via the Next.js API
-    user_id = _get_user_id(input_data)
-    if user_id:
+    finally:
         try:
-            public_url = _upload_to_api(filepath, filename, user_id)
-            # Clean up local file after successful upload
-            filepath.unlink(missing_ok=True)
-            return f"Screenshot saved: {filename} ({size} bytes)\nPublic URL: {public_url}"
-        except Exception as e:
-            # Fall back to local-only if upload fails
-            return f"Screenshot saved locally: {filename} ({size} bytes). Upload failed: {str(e)}"
-    else:
-        return f"Screenshot saved locally: {filename} ({size} bytes). No user ID available for cloud upload."
+            os.unlink(tmppath)
+        except OSError:
+            pass
 
 
-def _upload_to_api(filepath, filename: str, user_id: str) -> str:
+def _upload_to_api(filepath: str, filename: str, user_id: str) -> str:
     """Upload a screenshot file to the Next.js API endpoint using multipart form data."""
     import io
 
@@ -145,10 +147,10 @@ def _upload_to_api(filepath, filename: str, user_id: str) -> str:
         API_BASE,
         data=data,
         method="POST",
-        headers={
+        headers=service_headers({
             "Content-Type": f"multipart/form-data; boundary={boundary}",
             "Content-Length": str(len(data)),
-        },
+        }),
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         result = json.loads(resp.read().decode())
@@ -158,12 +160,12 @@ def _upload_to_api(filepath, filename: str, user_id: str) -> str:
 async def handle_list_screenshots(input_data: dict) -> str:
     user_id = _get_user_id(input_data)
     if not user_id:
-        # Fall back to local listing
-        return _list_local_screenshots()
+        return "Error: userId is required to list screenshots"
 
     try:
+        import urllib.parse
         url = f"{API_BASE}?userId={urllib.parse.quote(user_id)}"
-        req = urllib.request.Request(url)
+        req = urllib.request.Request(url, headers=service_headers())
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
         screenshots = data.get("screenshots", [])
@@ -173,65 +175,34 @@ async def handle_list_screenshots(input_data: dict) -> str:
         for s in screenshots:
             lines.append(f"{s['filename']} ({s.get('size', 0)} bytes) - {s.get('public_url', '')}")
         return "\n".join(lines)
-    except Exception:
-        return _list_local_screenshots()
-
-
-def _list_local_screenshots() -> str:
-    """Fallback: list screenshots from local directory."""
-    files = sorted(SCREENSHOTS_DIR.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True)
-    files = [f for f in files if f.is_file() and not f.name.startswith(".")]
-    if not files:
-        return "No screenshots found."
-    lines = []
-    for f in files:
-        stat = f.stat()
-        age = time.time() - stat.st_mtime
-        if age < 60:
-            ago = f"{int(age)}s ago"
-        elif age < 3600:
-            ago = f"{int(age / 60)}m ago"
-        else:
-            ago = f"{int(age / 3600)}h ago"
-        lines.append(f"{f.name} ({stat.st_size} bytes, {ago})")
-    return "\n".join(lines)
+    except Exception as e:
+        return f"Error listing screenshots: {str(e)}"
 
 
 async def handle_read_screenshot(input_data: dict) -> str:
     user_id = _get_user_id(input_data)
-    if user_id:
-        try:
-            import urllib.parse
-            url = f"{API_BASE}?userId={urllib.parse.quote(user_id)}"
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-            screenshots = data.get("screenshots", [])
-            filename = input_data["filename"]
-            for s in screenshots:
-                if s["filename"] == filename:
-                    return (
-                        f"Screenshot: {s['filename']}\n"
-                        f"Public URL: {s.get('public_url', 'N/A')}\n"
-                        f"Size: {s.get('size', 0)} bytes\n"
-                        f"Created: {s.get('created_at', 'unknown')}"
-                    )
-            return f"Error: Screenshot not found in cloud: {filename}"
-        except Exception:
-            pass
+    if not user_id:
+        return "Error: userId is required to read screenshot metadata"
 
-    # Fallback to local
     filename = input_data["filename"]
-    resolved = safe_path(filename, base=SCREENSHOTS_DIR)
-    if not resolved.exists():
+    try:
+        import urllib.parse
+        url = f"{API_BASE}?userId={urllib.parse.quote(user_id)}"
+        req = urllib.request.Request(url, headers=service_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        screenshots = data.get("screenshots", [])
+        for s in screenshots:
+            if s["filename"] == filename:
+                return (
+                    f"Screenshot: {s['filename']}\n"
+                    f"Public URL: {s.get('public_url', 'N/A')}\n"
+                    f"Size: {s.get('size', 0)} bytes\n"
+                    f"Created: {s.get('created_at', 'unknown')}"
+                )
         return f"Error: Screenshot not found: {filename}"
-    stat = resolved.stat()
-    return (
-        f"Screenshot: {filename}\n"
-        f"Path: {resolved}\n"
-        f"Size: {stat.st_size} bytes\n"
-        f"Created: {time.ctime(stat.st_mtime)}"
-    )
+    except Exception as e:
+        return f"Error reading screenshot: {str(e)}"
 
 
 HANDLERS = {

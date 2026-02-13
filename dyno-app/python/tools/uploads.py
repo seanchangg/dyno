@@ -11,7 +11,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-from ._common import UPLOADS_DIR, UPLOADS_BUCKET, STORAGE_MODE, FRONTEND_URL, safe_path
+from ._common import UPLOADS_DIR, UPLOADS_BUCKET, STORAGE_MODE, FRONTEND_URL, safe_path, service_headers
 
 TOOL_DEFS = [
     {
@@ -102,7 +102,8 @@ async def handle_list_uploads(input_data: dict) -> str:
 
     try:
         url = f"{FRONTEND_URL}/api/uploads?userId={urllib.parse.quote(user_id)}"
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        list_req = urllib.request.Request(url, headers=service_headers())
+        with urllib.request.urlopen(list_req, timeout=10) as resp:
             files = json.loads(resp.read())
 
         if not files:

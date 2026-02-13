@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/ToastProvider";
+import { authFetch } from "@/lib/api";
 
 interface ContextFile {
   filename: string;
@@ -19,7 +20,7 @@ export default function ContextPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetch("/api/context")
+    authFetch("/api/context")
       .then((r) => r.json())
       .then((data) => {
         const contextFiles = data.files || [];
@@ -45,7 +46,7 @@ export default function ContextPage() {
     if (!selectedFile) return;
     setSaving(true);
     try {
-      await fetch("/api/context", {
+      await authFetch("/api/context", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename: selectedFile, content }),

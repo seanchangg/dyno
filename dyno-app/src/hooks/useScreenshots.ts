@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { authFetch } from "@/lib/api";
 
 export interface Screenshot {
   id: string;
@@ -23,7 +24,7 @@ export function useScreenshots(userId: string | undefined, options?: UseScreensh
   const refresh = useCallback(async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`/api/screenshots?userId=${userId}`);
+      const res = await authFetch(`/api/screenshots?userId=${userId}`);
       const data = await res.json();
       const raw = data.screenshots ?? [];
       setScreenshots(
@@ -50,7 +51,7 @@ export function useScreenshots(userId: string | undefined, options?: UseScreensh
     async (id: string) => {
       if (!userId) return;
       try {
-        await fetch(`/api/screenshots?userId=${userId}&id=${id}`, {
+        await authFetch(`/api/screenshots?userId=${userId}&id=${id}`, {
           method: "DELETE",
         });
         refresh();

@@ -8,6 +8,7 @@ import { getDecryptedApiKey } from "@/lib/crypto";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useState, useEffect } from "react";
 import type { PermissionMode } from "@/types";
+import { authFetch } from "@/lib/api";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -42,7 +43,7 @@ export default function AgentLabPage() {
     async (toolName: string, currentMode: "auto" | "manual") => {
       const newMode: PermissionMode = currentMode === "auto" ? "manual" : "auto";
       try {
-        await fetch("/api/tool-permissions", {
+        await authFetch("/api/tool-permissions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tool: toolName, mode: newMode }),
@@ -58,7 +59,7 @@ export default function AgentLabPage() {
   // Reset all overrides
   const resetToolOverrides = useCallback(async () => {
     try {
-      await fetch("/api/tool-permissions", { method: "DELETE" });
+      await authFetch("/api/tool-permissions", { method: "DELETE" });
       server.refresh();
     } catch {
       toast("Failed to reset permissions", "error");

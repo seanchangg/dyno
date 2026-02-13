@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth";
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
-  const { userId, encrypted_api_key, chat_settings } = body;
+  const userId = getAuthUserId(req) || body.userId;
+  const { encrypted_api_key, chat_settings } = body;
 
   if (!userId) {
     return NextResponse.json(

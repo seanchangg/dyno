@@ -15,6 +15,7 @@ import { addTokenUsage } from "@/lib/token-usage";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useAgentStatus } from "@/hooks/useAgentStatus";
 import { WS_URL } from "@/lib/agent-config";
+import { authFetch } from "@/lib/api";
 
 const RECONNECT_DELAY_MS = 3000;
 
@@ -507,7 +508,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
 
   // Load master chat history on mount
   useEffect(() => {
-    fetch("/api/chat/history")
+    authFetch("/api/chat/history")
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data.messages) && data.messages.length > 0) {
@@ -527,7 +528,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
     const masterState = store.getSession("master");
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
-      fetch("/api/chat/history", {
+      authFetch("/api/chat/history", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -676,7 +677,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
       messages: [],
       proposals: [],
     }));
-    fetch("/api/chat/history", { method: "DELETE" }).catch(() => {});
+    authFetch("/api/chat/history", { method: "DELETE" }).catch(() => {});
   }, [store]);
 
   return (

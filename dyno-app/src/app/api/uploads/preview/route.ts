@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
+import { getAuthUserId } from "@/lib/auth";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "data", "uploads");
 const MAX_PREVIEW_BYTES = 50 * 1024; // 50KB preview limit
@@ -14,7 +15,7 @@ const isCloudMode = STORAGE_MODE === "cloud" && !!SUPABASE_URL && !!SERVICE_ROLE
 
 export async function GET(request: NextRequest) {
   const filename = request.nextUrl.searchParams.get("filename");
-  const userId = request.nextUrl.searchParams.get("userId");
+  const userId = getAuthUserId(request);
 
   if (!filename || typeof filename !== "string") {
     return NextResponse.json({ error: "filename required" }, { status: 400 });

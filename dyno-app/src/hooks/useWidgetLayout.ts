@@ -7,6 +7,7 @@ import { DEFAULT_WIDGETS } from "@/lib/widgets/default-layout";
 import { migrateLayout, createDefaultTabbedLayout } from "@/lib/widgets/migration";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchLayout, saveLayoutToSupabase } from "@/lib/supabase/layout";
+import { authFetch } from "@/lib/api";
 
 // Widget IDs that cannot be removed — losing these locks the user out of core functionality
 export const PROTECTED_WIDGET_IDS = new Set(["master-chat"]);
@@ -230,7 +231,7 @@ export function useWidgetLayout() {
 
       // Try local file
       try {
-        const res = await fetch("/api/layout");
+        const res = await authFetch("/api/layout");
         if (res.ok) {
           const data = await res.json();
           const migrated = migrateLayout(data);
@@ -255,7 +256,7 @@ export function useWidgetLayout() {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       // Save to local file
-      fetch("/api/layout", {
+      authFetch("/api/layout", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(layout),

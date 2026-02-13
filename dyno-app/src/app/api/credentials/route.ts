@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthUserId } from "@/lib/auth";
 
 const GATEWAY_HTTP_URL = process.env.NEXT_PUBLIC_GATEWAY_URL
   ? process.env.NEXT_PUBLIC_GATEWAY_URL.replace("ws://", "http://").replace("wss://", "https://")
@@ -10,7 +11,7 @@ const GATEWAY_HTTP_URL = process.env.NEXT_PUBLIC_GATEWAY_URL
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.nextUrl.searchParams.get("userId") || "";
+    const userId = getAuthUserId(req) || "";
     const gatewayRes = await fetch(
       `${GATEWAY_HTTP_URL}/api/credentials?userId=${encodeURIComponent(userId)}`,
       { headers: { "Content-Type": "application/json" } },

@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthUserId } from "@/lib/auth";
 
 const GATEWAY_HTTP_URL = process.env.NEXT_PUBLIC_GATEWAY_URL
   ? process.env.NEXT_PUBLIC_GATEWAY_URL.replace("ws://", "http://").replace("wss://", "https://")
@@ -26,8 +27,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Allow userId from body, header, or Referer (widget iframes get it injected)
+    // Prefer auth-derived userId, fall back to body/header/referer for widget iframes
     const userId =
+      getAuthUserId(req) ||
       body.userId ||
       req.headers.get("x-user-id") ||
       userIdFromReferer(req) ||

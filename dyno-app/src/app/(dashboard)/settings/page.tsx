@@ -12,6 +12,7 @@ import {
 } from "@/lib/crypto";
 import type { ChatSettings } from "@/types";
 import { DEFAULT_CHAT_SETTINGS } from "@/types";
+import { authFetch } from "@/lib/api";
 
 export default function SettingsPage() {
   const { user, profile, signOut } = useAuth();
@@ -68,7 +69,7 @@ export default function SettingsPage() {
       setPrivateKeyInput(exported);
 
       // Store ciphertext in Supabase
-      const res = await fetch("/api/profile", {
+      const res = await authFetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -109,7 +110,7 @@ export default function SettingsPage() {
   const loadCredentials = async () => {
     if (!user) return;
     try {
-      const res = await fetch(`/api/credentials?userId=${user.id}`);
+      const res = await authFetch(`/api/credentials?userId=${user.id}`);
       const data = await res.json();
       setCredentials(data.credentials ?? []);
     } catch {
@@ -132,7 +133,7 @@ export default function SettingsPage() {
     setCredLoading(true);
     setCredStatus(null);
     try {
-      const res = await fetch("/api/credentials", {
+      const res = await authFetch("/api/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, name: nameUpper, value: credValue }),
@@ -156,7 +157,7 @@ export default function SettingsPage() {
   const handleRemoveCredential = async (name: string) => {
     if (!user) return;
     try {
-      await fetch("/api/credentials", {
+      await authFetch("/api/credentials", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, name }),
@@ -173,7 +174,7 @@ export default function SettingsPage() {
     setChatSettingsSaving(true);
     setChatSettingsStatus(null);
     try {
-      const res = await fetch("/api/profile", {
+      const res = await authFetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

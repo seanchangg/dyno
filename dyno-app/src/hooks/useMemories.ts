@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { authFetch } from "@/lib/api";
 
 export interface Memory {
   id: string;
@@ -23,7 +24,7 @@ export function useMemories(userId: string | undefined, options?: UseMemoriesOpt
   const refresh = useCallback(async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`/api/memories?userId=${userId}`);
+      const res = await authFetch(`/api/memories?userId=${userId}`);
       const data = await res.json();
       setMemories(data.memories ?? []);
     } catch {
@@ -41,7 +42,7 @@ export function useMemories(userId: string | undefined, options?: UseMemoriesOpt
     async (tag: string, content: string) => {
       if (!userId) return;
       try {
-        await fetch("/api/memories", {
+        await authFetch("/api/memories", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, tag, content }),
@@ -58,7 +59,7 @@ export function useMemories(userId: string | undefined, options?: UseMemoriesOpt
     async (id: string) => {
       if (!userId) return;
       try {
-        await fetch(`/api/memories?userId=${userId}&id=${id}`, {
+        await authFetch(`/api/memories?userId=${userId}&id=${id}`, {
           method: "DELETE",
         });
         refresh();

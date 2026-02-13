@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Card from "@/components/ui/Card";
 import { useAuth } from "@/hooks/useAuth";
+import { authFetch } from "@/lib/api";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ function useWidgetQuery<T>(
   const fetchData = useCallback(async () => {
     const qs = new URLSearchParams({ table, ...params }).toString();
     try {
-      const res = await fetch(`/api/widget-query?${qs}`);
+      const res = await authFetch(`/api/widget-query?${qs}`);
       if (!res.ok) return;
       const json = await res.json();
       if (mountedRef.current && json.rows) {

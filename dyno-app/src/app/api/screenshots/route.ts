@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth";
 
 /**
  * GET /api/screenshots?userId=...
  * List screenshots for a user from Supabase DB.
  */
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
+  const userId = getAuthUserId(req);
 
   if (!userId) {
     return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
-  const userId = formData.get("userId") as string | null;
+  const userId = getAuthUserId(req) || (formData.get("userId") as string | null);
   const filename = formData.get("filename") as string | null;
 
   if (!file || !userId || !filename) {
@@ -103,9 +103,8 @@ export async function POST(req: NextRequest) {
  * Delete a screenshot from both Supabase Storage and DB.
  */
 export async function DELETE(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
-  const id = searchParams.get("id");
+  const userId = getAuthUserId(req);
+  const id = req.nextUrl.searchParams.get("id");
 
   if (!userId || !id) {
     return NextResponse.json(

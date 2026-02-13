@@ -54,6 +54,21 @@ SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+# ── Internal service key (for authenticating with Next.js middleware) ──────
+INTERNAL_SERVICE_KEY = os.getenv(
+    "INTERNAL_API_KEY",
+    os.getenv("GATEWAY_KEY_STORE_SECRET", "dyno-dev-secret-change-in-production"),
+)
+
+
+def service_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Return headers dict with the X-Service-Key for Next.js middleware auth."""
+    h: dict[str, str] = {"X-Service-Key": INTERNAL_SERVICE_KEY}
+    if extra:
+        h.update(extra)
+    return h
+
+
 def safe_path(filename: str, base: Path | None = None, allowed_bases: list[Path] | None = None) -> Path:
     """Resolve a filename to a safe path within allowed directories.
 

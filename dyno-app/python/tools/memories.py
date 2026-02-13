@@ -10,7 +10,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-from ._common import FRONTEND_URL
+from ._common import FRONTEND_URL, service_headers
 
 API_BASE = FRONTEND_URL + "/api/memories"
 
@@ -125,7 +125,7 @@ async def handle_save_memory(input_data: dict) -> str:
     req = urllib.request.Request(
         API_BASE,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=service_headers({"Content-Type": "application/json"}),
         method="POST",
     )
 
@@ -153,9 +153,10 @@ async def handle_recall_memories(input_data: dict) -> str:
         params["q"] = query
 
     url = f"{API_BASE}?{urllib.parse.urlencode(params)}"
+    recall_req = urllib.request.Request(url, headers=service_headers())
 
     try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        with urllib.request.urlopen(recall_req, timeout=10) as resp:
             result = json.loads(resp.read())
             memories = result.get("memories", [])
 
@@ -189,7 +190,7 @@ async def handle_delete_memory(input_data: dict) -> str:
     params = urllib.parse.urlencode({"userId": user_id, "tag": tag})
     url = f"{API_BASE}?{params}"
 
-    req = urllib.request.Request(url, method="DELETE")
+    req = urllib.request.Request(url, method="DELETE", headers=service_headers())
 
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:

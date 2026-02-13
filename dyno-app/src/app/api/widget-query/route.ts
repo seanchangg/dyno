@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth";
 
 const ALLOWED_TABLES = new Set(["agent_activity", "child_sessions", "token_usage_hourly"]);
 const MAX_LIMIT = 200;
@@ -12,7 +13,7 @@ const MAX_LIMIT = 200;
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const table = searchParams.get("table");
-  const userId = searchParams.get("user_id");
+  const userId = getAuthUserId(req);
   const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), MAX_LIMIT);
   const toolName = searchParams.get("tool_name");
   const status = searchParams.get("status");

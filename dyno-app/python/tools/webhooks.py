@@ -11,7 +11,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-from ._common import FRONTEND_URL
+from ._common import FRONTEND_URL, service_headers
 
 API_BASE = FRONTEND_URL + "/api/webhooks"
 
@@ -197,7 +197,7 @@ async def handle_register_webhook(input_data: dict) -> str:
     req = urllib.request.Request(
         API_BASE,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=service_headers({"Content-Type": "application/json"}),
         method="POST",
     )
 
@@ -226,9 +226,10 @@ async def handle_list_webhooks(input_data: dict) -> str:
 
     params = urllib.parse.urlencode({"userId": user_id, "action": "list"})
     url = f"{API_BASE}?{params}"
+    list_req = urllib.request.Request(url, headers=service_headers())
 
     try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        with urllib.request.urlopen(list_req, timeout=10) as resp:
             result = json.loads(resp.read())
             endpoints = result.get("endpoints", [])
 
@@ -256,9 +257,10 @@ async def handle_poll_webhooks(input_data: dict) -> str:
         params["endpointName"] = endpoint_name
 
     url = f"{API_BASE}?{urllib.parse.urlencode(params)}"
+    poll_req = urllib.request.Request(url, headers=service_headers())
 
     try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        with urllib.request.urlopen(poll_req, timeout=10) as resp:
             result = json.loads(resp.read())
             webhooks = result.get("webhooks", [])
 
@@ -281,9 +283,10 @@ async def handle_get_webhook_config(input_data: dict) -> str:
 
     params = urllib.parse.urlencode({"userId": user_id, "action": "config"})
     url = f"{API_BASE}?{params}"
+    config_req = urllib.request.Request(url, headers=service_headers())
 
     try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        with urllib.request.urlopen(config_req, timeout=10) as resp:
             result = json.loads(resp.read())
             config = result.get("config", {})
             cap = config.get("hourly_token_cap")
@@ -312,7 +315,7 @@ async def handle_set_webhook_config(input_data: dict) -> str:
     req = urllib.request.Request(
         API_BASE,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=service_headers({"Content-Type": "application/json"}),
         method="PATCH",
     )
 
@@ -342,7 +345,7 @@ async def handle_delete_webhook(input_data: dict) -> str:
     params = urllib.parse.urlencode({"userId": user_id, "endpointName": endpoint_name})
     url = f"{API_BASE}?{params}"
 
-    req = urllib.request.Request(url, method="DELETE")
+    req = urllib.request.Request(url, method="DELETE", headers=service_headers())
 
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:

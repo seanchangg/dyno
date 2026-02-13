@@ -9,7 +9,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-from ._common import FRONTEND_URL
+from ._common import FRONTEND_URL, service_headers
 
 API_BASE = FRONTEND_URL + "/api/memories"
 
@@ -89,7 +89,8 @@ def _fetch_memory(user_id: str, tag: str) -> dict | None:
     params = urllib.parse.urlencode({"userId": user_id, "tag": tag})
     url = f"{API_BASE}?{params}"
     try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        req = urllib.request.Request(url, headers=service_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read())
             memories = result.get("memories", [])
             return memories[0] if memories else None
@@ -103,7 +104,7 @@ def _save_memory(user_id: str, tag: str, content: str) -> dict:
     req = urllib.request.Request(
         API_BASE,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=service_headers({"Content-Type": "application/json"}),
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
@@ -174,8 +175,9 @@ async def list_memory_tags(input_data: dict) -> str:
     try:
         params = urllib.parse.urlencode({"userId": user_id})
         url = f"{API_BASE}?{params}"
+        list_req = urllib.request.Request(url, headers=service_headers())
 
-        with urllib.request.urlopen(url, timeout=10) as resp:
+        with urllib.request.urlopen(list_req, timeout=10) as resp:
             result = json.loads(resp.read())
             memories = result.get("memories", [])
             tags = [m["tag"] for m in memories]

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { authFetch } from "@/lib/api";
 
 export interface VaultFile {
   filename: string;
@@ -21,7 +22,7 @@ export function useVaultFiles(userId: string | undefined, options?: UseVaultFile
   const refresh = useCallback(async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`/api/uploads?userId=${userId}`);
+      const res = await authFetch(`/api/uploads?userId=${userId}`);
       const data = await res.json();
       setFiles(Array.isArray(data) ? data : []);
     } catch {
@@ -42,7 +43,7 @@ export function useVaultFiles(userId: string | undefined, options?: UseVaultFile
       formData.append("file", file);
       formData.append("userId", userId);
 
-      const res = await fetch("/api/uploads", {
+      const res = await authFetch("/api/uploads", {
         method: "POST",
         body: formData,
       });
@@ -60,7 +61,7 @@ export function useVaultFiles(userId: string | undefined, options?: UseVaultFile
   const deleteFile = useCallback(
     async (filename: string) => {
       if (!userId) return;
-      const res = await fetch("/api/uploads", {
+      const res = await authFetch("/api/uploads", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename, userId }),

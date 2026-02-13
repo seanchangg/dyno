@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { authFetch } from "@/lib/api";
 
 export interface SkillInfo {
   id: string;
@@ -26,7 +27,7 @@ export function useSkills(userId?: string) {
   const fetchSkills = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/skills");
+      const res = await authFetch("/api/skills");
       if (!res.ok) throw new Error("Failed to fetch skills");
       const data = await res.json();
       setSkills(data.skills || []);
@@ -42,7 +43,7 @@ export function useSkills(userId?: string) {
     if (!userId) return;
 
     try {
-      const res = await fetch(`/api/skills?path=/user/${userId}`);
+      const res = await authFetch(`/api/skills?path=/user/${userId}`);
       if (res.ok) {
         const data = await res.json();
         setInstalled(data.installed || []);
@@ -61,7 +62,7 @@ export function useSkills(userId?: string) {
     async (skillId: string) => {
       if (!userId) return false;
       try {
-        const res = await fetch(`/api/skills`, {
+        const res = await authFetch(`/api/skills`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ skillId, userId, action: "install" }),
@@ -82,7 +83,7 @@ export function useSkills(userId?: string) {
     async (skillId: string) => {
       if (!userId) return false;
       try {
-        const res = await fetch(`/api/skills`, {
+        const res = await authFetch(`/api/skills`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ skillId, userId, action: "uninstall" }),

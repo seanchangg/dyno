@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
+import { getAuthUserId } from "@/lib/auth";
 
 const WIDGETS_DIR = path.join(process.cwd(), "data", "widgets");
 
@@ -76,6 +77,7 @@ export async function GET(
   }
 
   const userId =
+    getAuthUserId(req) ||
     req.nextUrl.searchParams.get("userId") ||
     req.headers.get("x-user-id") ||
     "";

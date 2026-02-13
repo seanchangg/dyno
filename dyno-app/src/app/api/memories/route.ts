@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth";
 
 /**
  * GET /api/memories?userId=...&tag=...&q=...
@@ -7,7 +8,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
+  const userId = getAuthUserId(req);
   const tag = searchParams.get("tag");
   const q = searchParams.get("q");
 
@@ -49,7 +50,8 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { userId, tag, content } = body;
+  const userId = getAuthUserId(req) || body.userId;
+  const { tag, content } = body;
 
   if (!userId || !tag || !content) {
     return NextResponse.json(
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
+  const userId = getAuthUserId(req);
   const id = searchParams.get("id");
   const tag = searchParams.get("tag");
 

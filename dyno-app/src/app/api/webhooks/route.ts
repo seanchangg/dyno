@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getAuthUserId } from "@/lib/auth";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
@@ -17,7 +18,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
+  const userId = getAuthUserId(req);
   const action = searchParams.get("action") || "list";
 
   if (!userId) {
@@ -101,7 +102,8 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { userId, endpointName, secret } = body;
+  const userId = getAuthUserId(req) || body.userId;
+  const { endpointName, secret } = body;
 
   if (!userId || !endpointName || !secret) {
     return NextResponse.json(
@@ -167,7 +169,8 @@ export async function POST(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { userId, hourlyTokenCap, rateLimitPerHour } = body;
+  const userId = getAuthUserId(req) || body.userId;
+  const { hourlyTokenCap, rateLimitPerHour } = body;
 
   if (!userId) {
     return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -204,9 +207,8 @@ export async function PATCH(req: NextRequest) {
  * Delete a webhook endpoint and its queued payloads.
  */
 export async function DELETE(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
-  const endpointName = searchParams.get("endpointName");
+  const userId = getAuthUserId(req);
+  const endpointName = req.nextUrl.searchParams.get("endpointName");
 
   if (!userId || !endpointName) {
     return NextResponse.json(

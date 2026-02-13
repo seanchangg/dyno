@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
+import { getAuthUserId } from "@/lib/auth";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "data", "uploads");
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
-    const userId = formData.get("userId") as string | null;
+    const userId = getAuthUserId(request) || (formData.get("userId") as string | null);
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
+  const userId = getAuthUserId(request);
 
   if (useCloud() && userId) {
     try {
@@ -175,7 +176,9 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { filename, userId } = await request.json();
+    const body = await request.json();
+    const filename = body.filename;
+    const userId = getAuthUserId(request) || body.userId;
 
     if (!filename || typeof filename !== "string") {
       return NextResponse.json(
