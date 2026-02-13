@@ -25,7 +25,7 @@ export default function Sidebar() {
         <DynoSprite status={status} size={40} />
         <div>
           <h1 className="text-lg font-bold tracking-wide text-highlight">
-            DYNO
+            MARTY
           </h1>
           <p className="text-xs text-text/50 capitalize">{status}</p>
         </div>

@@ -3,7 +3,7 @@ import path from "path";
 
 const DEFAULT_CLAUDE_MD = `# Agent System Prompt
 
-You are a helpful personal AI agent managed through Dyno.
+You are a helpful personal AI agent managed through Marty.
 
 ## Instructions
 - Be concise and helpful

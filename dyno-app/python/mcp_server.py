@@ -134,7 +134,7 @@ def health_check(_connection, request):
         reload_tools()
         body = json.dumps({
             "status": "ok",
-            "backend": "dyno-mcp-server",
+            "backend": "marty-mcp-server",
             "tools": len(AGENT_TOOLS),
         }).encode()
         return Response(

@@ -1,7 +1,7 @@
 /**
- * Dyno Dashboard Channel Plugin
+ * Marty Dashboard Channel Plugin
  *
- * Translates between Dyno's WebSocket message format and the Gateway's
+ * Translates between Marty's WebSocket message format and the Gateway's
  * internal agent loop. Handles tool approval flow via a pendingApprovals Map.
  */
 
@@ -60,7 +60,7 @@ export class DynoDashboardChannel {
     }
   }
 
-  /** Handle an inbound message from the Dyno frontend. */
+  /** Handle an inbound message from the Marty frontend. */
   async handleMessage(msg: DynoInboundMessage): Promise<void> {
     // Track userId from any message and propagate to agent for tool injection
     if (msg.userId) {

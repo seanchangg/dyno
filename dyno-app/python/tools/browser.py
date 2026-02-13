@@ -61,7 +61,7 @@ async def handle_web_search(input_data: dict) -> str:
 
     url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(query)}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; Dyno-Agent/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; Marty-Agent/1.0)",
     }
 
     try:

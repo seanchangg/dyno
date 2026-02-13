@@ -12,6 +12,7 @@ const TableWidget = lazy(() => import("@/components/widgets/TableWidget"));
 const HtmlWidget = lazy(() => import("@/components/widgets/HtmlWidget"));
 const VaultWidget = lazy(() => import("@/components/widgets/VaultWidget"));
 const AgentControlWidget = lazy(() => import("@/components/widgets/AgentControlWidget"));
+const TutorialWidget = lazy(() => import("@/components/widgets/TutorialWidget"));
 
 export function registerBuiltInWidgets() {
   registerWidget({
@@ -144,5 +145,17 @@ export function registerBuiltInWidgets() {
     maxW: 48,
     maxH: 40,
     component: AgentControlWidget as React.ComponentType<Record<string, unknown>>,
+  });
+
+  registerWidget({
+    type: "tutorial",
+    label: "Tutorial",
+    defaultW: 5,
+    defaultH: 8,
+    minW: 4,
+    minH: 4,
+    maxW: 8,
+    maxH: 40,
+    component: TutorialWidget as React.ComponentType<Record<string, unknown>>,
   });
 }

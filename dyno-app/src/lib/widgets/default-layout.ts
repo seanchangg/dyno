@@ -6,7 +6,7 @@ import type { Widget } from "@/types/widget";
  *
  * Offset: +16 columns from origin. WidgetCanvas sets initial pan to match.
  */
-const X = 16; // Column offset — gives 16 cols of room to the left
+const X = 0; // Left-aligned — no offset
 
 export const DEFAULT_WIDGETS: Widget[] = [
   {
@@ -19,6 +19,14 @@ export const DEFAULT_WIDGETS: Widget[] = [
     sessionId: "master",
   },
   {
+    id: "tutorial",
+    type: "tutorial",
+    x: X + 7,
+    y: 0,
+    w: 5,
+    h: 8,
+  },
+  {
     id: "memory-table",
     type: "memory-table",
     x: X,
@@ -29,38 +37,28 @@ export const DEFAULT_WIDGETS: Widget[] = [
   {
     id: "stat-agent-status",
     type: "stat-card",
-    x: X + 7,
+    x: X + 12,
     y: 0,
     w: 5,
     h: 2,
     props: { title: "Agent Status", dataSource: "agent-status" },
   },
   {
-    id: "stat-sessions",
+    id: "stat-cost",
     type: "stat-card",
-    x: X + 7,
+    x: X + 12,
     y: 2,
     w: 5,
     h: 2,
-    props: { title: "Sessions", dataSource: "sessions" },
+    props: { title: "Est. Total Cost", dataSource: "cost" },
   },
   {
-    id: "stat-tokens",
-    type: "stat-card",
-    x: X + 7,
+    id: "agent-control",
+    type: "agent-control",
+    x: X + 12,
     y: 4,
     w: 5,
-    h: 2,
-    props: { title: "Tokens In / Out", dataSource: "token-usage" },
-  },
-  {
-    id: "stat-cost",
-    type: "stat-card",
-    x: X + 7,
-    y: 6,
-    w: 5,
-    h: 2,
-    props: { title: "Est. Total Cost", dataSource: "cost" },
+    h: 9,
   },
   {
     id: "screenshot-gallery",
@@ -69,13 +67,5 @@ export const DEFAULT_WIDGETS: Widget[] = [
     y: 8,
     w: 5,
     h: 5,
-  },
-  {
-    id: "agent-control",
-    type: "agent-control",
-    x: X,
-    y: 13,
-    w: 12,
-    h: 7,
   },
 ];

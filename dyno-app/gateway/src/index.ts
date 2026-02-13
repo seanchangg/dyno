@@ -1,5 +1,5 @@
 /**
- * Dyno Gateway — WebSocket server entry point.
+ * Marty Gateway — WebSocket server entry point.
  *
  * Starts on port 18789 (configurable via openclaw.json or env).
  * Handles HTTP health checks, admin API, and WebSocket connections.
@@ -254,7 +254,7 @@ async function main() {
 
   // Load shared system prompt (cloud mode uses a restricted variant)
   const storageMode = process.env.STORAGE_MODE || "local";
-  let sharedSystemPrompt = "You are a helpful AI agent managed through Dyno.";
+  let sharedSystemPrompt = "You are a helpful AI agent managed through Marty.";
   try {
     const promptFile = storageMode === "cloud" ? "claude-cloud.md" : "claude.md";
     const contextPath = resolve(__dirname, "..", "..", "data", "context", promptFile);
@@ -455,7 +455,7 @@ async function main() {
   });
 
   httpServer.listen(port, host, () => {
-    console.log(`\nDyno Gateway running on ws://${host}:${port}`);
+    console.log(`\nMarty Gateway running on ws://${host}:${port}`);
     console.log(`Health check at http://${host}:${port}/health`);
     console.log(`Admin API at http://${host}:${port}/admin/`);
     console.log();

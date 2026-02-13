@@ -45,7 +45,7 @@ export default function SignupForm({ onSwitchToLogin }: SignupFormProps) {
         label="Username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        placeholder="dyno_user"
+        placeholder="marty_user"
         required
       />
       <Input

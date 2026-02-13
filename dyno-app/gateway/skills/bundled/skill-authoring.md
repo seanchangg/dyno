@@ -1,9 +1,9 @@
 ---
 id: skill-authoring
 name: Skill Authoring Guide
-description: How to write effective skill.md files for the Dyno agent
+description: How to write effective skill.md files for the Marty agent
 version: 1.0.0
-author: Dyno
+author: Marty
 tags: [core, meta, authoring]
 ---
 

@@ -2,7 +2,7 @@
  * Skill Loader — Discovers and parses SKILL.md files.
  *
  * Skills are markdown files loaded into the agent's system prompt as XML blocks.
- * Three tiers: bundled (ships with Dyno), managed (platform-curated),
+ * Three tiers: bundled (ships with Marty), managed (platform-curated),
  * and workspace (per-user, highest priority).
  */
 

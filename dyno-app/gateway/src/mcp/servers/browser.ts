@@ -70,7 +70,7 @@ export function createHandlers() {
         const res = await fetch(url, {
           signal: AbortSignal.timeout(10000),
           headers: {
-            "User-Agent": "Dyno-Agent/1.0",
+            "User-Agent": "Marty-Agent/1.0",
           },
         });
 

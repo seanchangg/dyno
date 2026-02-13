@@ -11,7 +11,7 @@ const jost = Jost({
 });
 
 export const metadata: Metadata = {
-  title: "Dyno",
+  title: "Marty",
   description: "Personal Agent Dashboard",
   icons: {
     icon: "/icon.svg",

@@ -31,7 +31,7 @@ async def _geocode_location(location: str) -> tuple[float, float, str] | None:
         params = urllib.parse.urlencode({"name": location, "count": 1, "language": "en", "format": "json"})
         url = f"https://geocoding-api.open-meteo.com/v1/search?{params}"
         
-        req = urllib.request.Request(url, headers={"User-Agent": "Dyno-Agent/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Marty-Agent/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         
@@ -71,7 +71,7 @@ async def handle_get_weather(input_data: dict) -> str:
         })
         url = f"https://api.open-meteo.com/v1/forecast?{params}"
         
-        req = urllib.request.Request(url, headers={"User-Agent": "Dyno-Agent/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Marty-Agent/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         

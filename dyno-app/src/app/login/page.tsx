@@ -18,7 +18,7 @@ export default function LoginPage() {
         <div className="mb-6 flex flex-col items-center gap-3">
           <DynoSprite status="online" size={56} />
           <h1 className="text-2xl font-bold tracking-wide text-highlight">
-            DYNO
+            MARTY
           </h1>
           <p className="text-sm text-text/50">Personal Agent Dashboard</p>
         </div>

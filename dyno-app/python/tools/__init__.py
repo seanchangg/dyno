@@ -1,5 +1,5 @@
 """
-Tool definitions and handlers for the Dyno Agent.
+Tool definitions and handlers for the Marty Agent.
 
 Each skill module in this directory exposes:
   TOOL_DEFS  — list of Anthropic tool schemas

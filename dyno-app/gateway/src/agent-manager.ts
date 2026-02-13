@@ -42,7 +42,7 @@ export class AgentManager {
   private keyStore: KeyStore;
   private config: AgentManagerConfig;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
-  private systemPrompt: string = "You are a helpful AI agent managed through Dyno.";
+  private systemPrompt: string = "You are a helpful AI agent managed through Marty.";
   private toolDescriptions: string = "";
 
   constructor(

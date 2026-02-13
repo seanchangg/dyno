@@ -101,7 +101,7 @@ const ACTIVATE_TOOLS_DEF: Anthropic.Tool = {
 
 // ── Plan system prompt ───────────────────────────────────────────────────────
 
-const PLAN_SYSTEM_PROMPT = `You are a build planner for Dyno, an autonomous AI agent.
+const PLAN_SYSTEM_PROMPT = `You are a build planner for Marty, an autonomous AI agent.
 Given a user's build request, analyze it and return a JSON build plan.
 Respond with ONLY valid JSON matching this schema:
 {
@@ -137,7 +137,7 @@ export class GatewayAgent {
       maxTokens: config?.maxTokens || DEFAULT_MAX_TOKENS,
       maxIterations: config?.maxIterations || DEFAULT_MAX_ITERATIONS,
     };
-    this.systemPrompt = "You are a helpful AI agent managed through Dyno.";
+    this.systemPrompt = "You are a helpful AI agent managed through Marty.";
     this.toolDescriptionsAppendix = "";
     this.skillsPrompt = "";
   }

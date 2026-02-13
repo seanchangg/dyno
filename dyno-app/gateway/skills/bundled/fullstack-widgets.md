@@ -3,7 +3,7 @@ id: fullstack-widgets
 name: Full-Stack Widget Authoring
 description: Patterns for building widgets with interactive frontends backed by server-side scripts
 version: 1.1.0
-author: Dyno
+author: Marty
 tags: [widgets, fullstack, execution, html]
 ---
 

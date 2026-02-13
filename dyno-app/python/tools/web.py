@@ -59,7 +59,7 @@ def strip_html(html: str) -> str:
 async def handle_fetch_url(input_data: dict) -> str:
     url = input_data["url"]
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Dyno-Agent/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Marty-Agent/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             content_type = resp.headers.get("Content-Type", "")
             raw = resp.read(512_000).decode("utf-8", errors="replace")

@@ -1,7 +1,7 @@
 /**
  * Supabase JWT verifier for Gateway WebSocket authentication.
  *
- * Validates JWTs from the Dyno frontend to resolve the userId
+ * Validates JWTs from the Marty frontend to resolve the userId
  * and route to the correct per-user agent.
  */
 
