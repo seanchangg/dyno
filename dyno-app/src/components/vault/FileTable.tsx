@@ -7,7 +7,8 @@ interface FileTableProps {
   files: VaultFile[];
   selectedFile: string | null;
   onSelect: (filename: string) => void;
-  onDelete: (filename: string) => Promise<void>;
+  onDelete?: (filename: string) => Promise<void>;
+  emptyMessage?: string;
 }
 
 function formatSize(bytes: number): string {
@@ -51,10 +52,11 @@ function getTypeBadge(filename: string): string {
   return map[ext] || ext.toUpperCase() || "FILE";
 }
 
-export default function FileTable({ files, selectedFile, onSelect, onDelete }: FileTableProps) {
+export default function FileTable({ files, selectedFile, onSelect, onDelete, emptyMessage }: FileTableProps) {
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
 
   const handleDeleteClick = async (filename: string) => {
+    if (!onDelete) return;
     if (confirmingDelete === filename) {
       setConfirmingDelete(null);
       await onDelete(filename);
@@ -66,7 +68,7 @@ export default function FileTable({ files, selectedFile, onSelect, onDelete }: F
   if (files.length === 0) {
     return (
       <div className="text-sm text-text/40 py-8 text-center">
-        No files uploaded yet
+        {emptyMessage || "No files yet"}
       </div>
     );
   }
@@ -79,7 +81,7 @@ export default function FileTable({ files, selectedFile, onSelect, onDelete }: F
           <th className="text-left py-2 px-3 font-medium w-20">Type</th>
           <th className="text-right py-2 px-3 font-medium w-24">Size</th>
           <th className="text-right py-2 px-3 font-medium w-28">Date</th>
-          <th className="text-right py-2 px-3 font-medium w-20"></th>
+          {onDelete && <th className="text-right py-2 px-3 font-medium w-20"></th>}
         </tr>
       </thead>
       <tbody>
@@ -107,22 +109,24 @@ export default function FileTable({ files, selectedFile, onSelect, onDelete }: F
             <td className="py-2 px-3 text-right text-text/50 text-xs">
               {formatDate(file.createdAt)}
             </td>
-            <td className="py-2 px-3 text-right">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClick(file.filename);
-                }}
-                onBlur={() => setConfirmingDelete(null)}
-                className={`text-xs transition-colors ${
-                  confirmingDelete === file.filename
-                    ? "text-red-400"
-                    : "text-text/30 hover:text-text/60"
-                }`}
-              >
-                {confirmingDelete === file.filename ? "Confirm" : "Delete"}
-              </button>
-            </td>
+            {onDelete && (
+              <td className="py-2 px-3 text-right">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteClick(file.filename);
+                  }}
+                  onBlur={() => setConfirmingDelete(null)}
+                  className={`text-xs transition-colors ${
+                    confirmingDelete === file.filename
+                      ? "text-red-400"
+                      : "text-text/30 hover:text-text/60"
+                  }`}
+                >
+                  {confirmingDelete === file.filename ? "Confirm" : "Delete"}
+                </button>
+              </td>
+            )}
           </tr>
         ))}
       </tbody>

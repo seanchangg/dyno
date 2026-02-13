@@ -4,7 +4,7 @@ import path from "path";
 import { getAuthUserId } from "@/lib/auth";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "data", "uploads");
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 
 const STORAGE_MODE = process.env.STORAGE_MODE || "local";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "File too large (max 10MB)" },
+        { error: "File too large (max 200MB)" },
         { status: 400 }
       );
     }

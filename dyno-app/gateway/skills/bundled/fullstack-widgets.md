@@ -226,6 +226,7 @@ Use this for dashboards, live feeds, or any widget that should stay current with
 
 ## Common Mistakes
 
+- **Saving JSON state/data files to widget-html**: The `/api/widget-html/` endpoint ONLY serves `.html` files — it returns 400 for everything else. Do NOT write JSON files to `workspace/widgets/`. JSON state files, config files, and other non-HTML data must go in **`workspace/data/`** (e.g. `workspace/data/my-widget-state.json`). Use `write_file` and `read_file` with `workspace/data/` paths for any persistent data your widgets need.
 - **pip installing at runtime**: Each execution is a fresh Docker container. `pip install` works but is lost immediately. Only pre-installed packages persist (pandas, numpy, matplotlib, etc. — see requirements-sandbox.txt). Do NOT pip install in execute_code and expect it in a widget backend script.
 - **Writing HTML to wrong path**: Must be `workspace/widgets/filename.html`, not just `workspace/filename.html`
 - **Using absolute URLs**: Always use relative `/api/` URLs in widget HTML
@@ -234,3 +235,4 @@ Use this for dashboards, live feeds, or any widget that should stay current with
 - **Hardcoding userId in HTML**: The widget-exec proxy handles userId injection automatically
 - **Using wrong field name for script**: The fetch body must use `script` (not `name`, `scriptName`, or `script_name`). Copy the `callBackend` helper from the template above exactly.
 - **Child agent trying to spawn sub-agents**: Opus child agents do NOT have `spawn_agent`. Always include "you are a child agent, build everything directly" in the spawn prompt.
+- **Using `/api/run-script` instead of `/api/widget-exec`**: There is NO `/api/run-script` endpoint. The `run_script` tool is for agent-side execution only. Widget HTML must always fetch `/api/widget-exec` to run saved scripts.

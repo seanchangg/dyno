@@ -38,7 +38,22 @@ interface TokenRow {
   request_count: number;
 }
 
-type Tab = "activity" | "sessions" | "tokens";
+interface HeartbeatRow {
+  id: string;
+  triggered_at: string;
+  triage_model: string;
+  triage_tokens_in: number;
+  triage_tokens_out: number;
+  escalated: boolean;
+  action_model: string | null;
+  action_tokens_in: number;
+  action_tokens_out: number;
+  total_cost_usd: number;
+  summary: string | null;
+  status: string;
+}
+
+type Tab = "activity" | "sessions" | "tokens" | "heartbeat";
 
 // ── Hook: useWidgetQuery ─────────────────────────────────────────────────────
 
@@ -99,9 +114,18 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function estimateCost(tokensIn: number, tokensOut: number): string {
-  // Rough Sonnet pricing: $3/MTok in, $15/MTok out
-  const cost = (tokensIn * 3 + tokensOut * 15) / 1_000_000;
+const MODEL_PRICING: Record<string, { inPerM: number; outPerM: number }> = {
+  "claude-haiku-4-5-20251001": { inPerM: 0.8, outPerM: 4 },
+  "claude-sonnet-4-5-20250929": { inPerM: 3, outPerM: 15 },
+  "claude-opus-4-20250514": { inPerM: 15, outPerM: 75 },
+  "claude-opus-4-6": { inPerM: 15, outPerM: 75 },
+};
+
+const DEFAULT_PRICING = MODEL_PRICING["claude-sonnet-4-5-20250929"];
+
+function estimateCost(tokensIn: number, tokensOut: number, model?: string | null): string {
+  const pricing = (model && MODEL_PRICING[model]) || DEFAULT_PRICING;
+  const cost = (tokensIn * pricing.inPerM + tokensOut * pricing.outPerM) / 1_000_000;
   return `$${cost.toFixed(4)}`;
 }
 
@@ -218,6 +242,7 @@ function SessionsTab({ userId }: { userId: string }) {
             <th className="text-center py-1.5 px-2 font-medium">Status</th>
             <th className="text-right py-1.5 px-2 font-medium">Tokens In</th>
             <th className="text-right py-1.5 px-2 font-medium">Tokens Out</th>
+            <th className="text-right py-1.5 px-2 font-medium">Cost</th>
             <th className="text-left py-1.5 px-2 font-medium">Created</th>
           </tr>
         </thead>
@@ -233,6 +258,7 @@ function SessionsTab({ userId }: { userId: string }) {
               </td>
               <td className="py-1.5 px-2 text-right text-text/50">{formatTokens(row.tokens_in)}</td>
               <td className="py-1.5 px-2 text-right text-text/50">{formatTokens(row.tokens_out)}</td>
+              <td className="py-1.5 px-2 text-right text-text/50">{estimateCost(row.tokens_in, row.tokens_out, row.model)}</td>
               <td className="py-1.5 px-2 text-text/40">{relativeTime(row.created_at)}</td>
             </tr>
           ))}
@@ -250,9 +276,28 @@ function TokensTab({ userId }: { userId: string }) {
     { user_id: userId, period: "24h", limit: "24" },
     15_000
   );
+  const { data: childData } = useWidgetQuery<SessionRow>(
+    "child_sessions",
+    { user_id: userId, period: "24h", limit: "200" },
+    15_000
+  );
 
-  const totalIn = data.reduce((s, r) => s + r.tokens_in, 0);
-  const totalOut = data.reduce((s, r) => s + r.tokens_out, 0);
+  // Parent tokens (assumes sonnet default)
+  const parentIn = data.reduce((s, r) => s + r.tokens_in, 0);
+  const parentOut = data.reduce((s, r) => s + r.tokens_out, 0);
+  const parentCost = (parentIn * DEFAULT_PRICING.inPerM + parentOut * DEFAULT_PRICING.outPerM) / 1_000_000;
+
+  // Child tokens with model-weighted cost
+  const childIn = childData.reduce((s, r) => s + r.tokens_in, 0);
+  const childOut = childData.reduce((s, r) => s + r.tokens_out, 0);
+  const childCost = childData.reduce((s, r) => {
+    const pricing = (r.model && MODEL_PRICING[r.model]) || DEFAULT_PRICING;
+    return s + (r.tokens_in * pricing.inPerM + r.tokens_out * pricing.outPerM) / 1_000_000;
+  }, 0);
+
+  const totalIn = parentIn + childIn;
+  const totalOut = parentOut + childOut;
+  const totalCost = parentCost + childCost;
   const totalRequests = data.reduce((s, r) => s + r.request_count, 0);
   const maxTokens = Math.max(...data.map((r) => r.tokens_in + r.tokens_out), 1);
 
@@ -274,13 +319,21 @@ function TokensTab({ userId }: { userId: string }) {
         </div>
         <div>
           <div className="text-text/40 text-[10px] font-medium">Est. Cost</div>
-          <div className="text-highlight text-sm font-semibold">{estimateCost(totalIn, totalOut)}</div>
+          <div className="text-highlight text-sm font-semibold">${totalCost.toFixed(4)}</div>
         </div>
         <div>
           <div className="text-text/40 text-[10px] font-medium">Requests</div>
           <div className="text-highlight text-sm font-semibold">{totalRequests}</div>
         </div>
       </div>
+
+      {/* Cost breakdown if there are children */}
+      {childData.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 px-1 text-[10px] font-mono">
+          <div className="text-text/40">Parent: ${parentCost.toFixed(4)}</div>
+          <div className="text-text/40">Children ({childData.length}): ${childCost.toFixed(4)}</div>
+        </div>
+      )}
 
       {/* Hourly bar chart */}
       {data.length === 0 ? (
@@ -310,6 +363,85 @@ function TokensTab({ userId }: { userId: string }) {
   );
 }
 
+// ── HeartbeatTab ─────────────────────────────────────────────────────────────
+
+function HeartbeatTab({ userId }: { userId: string }) {
+  const { data, loading } = useWidgetQuery<HeartbeatRow>(
+    "heartbeat_log",
+    { user_id: userId, limit: "50", period: "24h" },
+    15_000
+  );
+
+  const todayCost = data.reduce((s, r) => s + Number(r.total_cost_usd), 0);
+  const totalTicks = data.length;
+  const escalations = data.filter((r) => r.escalated).length;
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case "ok": return "text-highlight";
+      case "escalated": return "text-secondary";
+      case "error": return "text-red-400";
+      case "budget_exceeded": return "text-red-400";
+      default: return "text-text/50";
+    }
+  };
+
+  if (loading && data.length === 0) {
+    return <div className="text-text/30 text-xs p-4">Loading heartbeat log...</div>;
+  }
+
+  return (
+    <div className="h-full flex flex-col gap-3 overflow-auto">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-2 px-1">
+        <div>
+          <div className="text-text/40 text-[10px] font-medium">Today&apos;s Cost</div>
+          <div className="text-highlight text-sm font-semibold">${todayCost.toFixed(4)}</div>
+        </div>
+        <div>
+          <div className="text-text/40 text-[10px] font-medium">Ticks (24h)</div>
+          <div className="text-highlight text-sm font-semibold">{totalTicks}</div>
+        </div>
+        <div>
+          <div className="text-text/40 text-[10px] font-medium">Escalations</div>
+          <div className="text-secondary text-sm font-semibold">{escalations}</div>
+        </div>
+      </div>
+
+      {data.length === 0 ? (
+        <div className="text-text/30 text-xs px-1">No heartbeat ticks in the last 24h.</div>
+      ) : (
+        <table className="w-full text-xs font-mono">
+          <thead>
+            <tr className="text-text/40 border-b border-primary/10">
+              <th className="text-left py-1.5 px-2 font-medium">Time</th>
+              <th className="text-center py-1.5 px-2 font-medium">Status</th>
+              <th className="text-right py-1.5 px-2 font-medium">Cost</th>
+              <th className="text-left py-1.5 px-2 font-medium">Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row) => (
+              <tr key={row.id} className="border-b border-primary/5 hover:bg-primary/5 transition-colors">
+                <td className="py-1.5 px-2 text-text/50">{relativeTime(row.triggered_at)}</td>
+                <td className={`py-1.5 px-2 text-center ${statusColor(row.status)}`}>
+                  {row.status}
+                </td>
+                <td className="py-1.5 px-2 text-right text-text/50">
+                  ${Number(row.total_cost_usd).toFixed(4)}
+                </td>
+                <td className="py-1.5 px-2 text-text/40 truncate max-w-[200px]">
+                  {row.summary || (row.status === "ok" ? "HEARTBEAT_OK" : "-")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ── Main Widget ──────────────────────────────────────────────────────────────
 
 function AgentControlWidget() {
@@ -328,6 +460,7 @@ function AgentControlWidget() {
     { key: "activity", label: "Activity" },
     { key: "sessions", label: "Sessions" },
     { key: "tokens", label: "Tokens" },
+    { key: "heartbeat", label: "Heartbeat" },
   ];
 
   return (
@@ -354,6 +487,7 @@ function AgentControlWidget() {
         {activeTab === "activity" && <ActivityTab userId={user.id} />}
         {activeTab === "sessions" && <SessionsTab userId={user.id} />}
         {activeTab === "tokens" && <TokensTab userId={user.id} />}
+        {activeTab === "heartbeat" && <HeartbeatTab userId={user.id} />}
       </div>
     </Card>
   );

@@ -504,6 +504,27 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
         break;
       }
 
+      case "heartbeat_escalated":
+        toastRef.current(
+          `Heartbeat escalated: ${data.reason || "Task needs attention"}`,
+          "info"
+        );
+        break;
+
+      case "heartbeat_completed":
+        toastRef.current(
+          `Heartbeat completed ($${(data.totalCost as number)?.toFixed(4) || "0"})${data.summary ? `: ${(data.summary as string).slice(0, 80)}` : ""}`,
+          "success"
+        );
+        break;
+
+      case "heartbeat_budget_exceeded":
+        toastRef.current(
+          `Heartbeat budget exceeded ($${(data.dailyCost as number)?.toFixed(4)}/$${data.budgetCap}). Auto-paused.`,
+          "error"
+        );
+        break;
+
       case "error":
         toastRef.current(data.message || "An error occurred.", "error");
         store.updateSession(sessionId, (prev) => ({

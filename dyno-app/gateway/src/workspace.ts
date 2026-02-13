@@ -5,7 +5,7 @@
  * gateway/workspaces/{userId}/ with predefined subdirectories.
  */
 
-import { mkdirSync, existsSync, rmSync, readdirSync, statSync } from "fs";
+import { mkdirSync, existsSync, rmSync, readdirSync, statSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -20,6 +20,43 @@ const WORKSPACE_SUBDIRS = [
   "sessions",
   "skills",
 ] as const;
+
+// ── Default context file contents ────────────────────────────────────────────
+
+export const DEFAULT_CLAUDE_MD = `# Agent System Prompt
+
+You are a helpful personal AI agent managed through Marty.
+
+## Instructions
+- Be concise and helpful
+- Use tools when appropriate
+- Log your thinking process
+`;
+
+export const DEFAULT_SOUL_MD = `# Soul
+
+## Identity
+You are a helpful personal AI agent.
+
+## Values
+- Be proactive and anticipate user needs
+- Be concise and direct
+- Protect user data and privacy
+
+## Personality
+- Professional but friendly
+- Take initiative when tasks are clear
+`;
+
+export const DEFAULT_HEARTBEAT_MD = `# Heartbeat Tasks
+
+This file is read every time your heartbeat fires. Review the tasks below
+and decide if any need attention right now. If nothing needs action,
+respond with HEARTBEAT_OK.
+
+## Tasks
+- [ ] Check if core-state memory needs updating
+`;
 
 // ── WorkspaceManager ─────────────────────────────────────────────────────────
 
@@ -54,8 +91,39 @@ export class WorkspaceManager {
       mkdirSync(resolve(workspacePath, subdir), { recursive: true });
     }
 
+    // Seed default context files
+    this.seedDefaultContextFiles(workspacePath);
+
     console.log(`[workspace] Provisioned workspace for user ${userId}`);
     return workspacePath;
+  }
+
+  /** Seed default context files (claude.md, soul.md, heartbeat.md) if they don't exist. */
+  seedDefaultContextFiles(workspacePath: string, userName?: string): void {
+    const contextDir = resolve(workspacePath, "data", "context");
+    mkdirSync(contextDir, { recursive: true });
+
+    const claudePath = resolve(contextDir, "claude.md");
+    if (!existsSync(claudePath)) {
+      let content = DEFAULT_CLAUDE_MD;
+      if (userName) {
+        content = content.replace(
+          "# Agent System Prompt",
+          `# Agent System Prompt\n\nUser: ${userName}`
+        );
+      }
+      writeFileSync(claudePath, content, "utf-8");
+    }
+
+    const soulPath = resolve(contextDir, "soul.md");
+    if (!existsSync(soulPath)) {
+      writeFileSync(soulPath, DEFAULT_SOUL_MD, "utf-8");
+    }
+
+    const heartbeatPath = resolve(contextDir, "heartbeat.md");
+    if (!existsSync(heartbeatPath)) {
+      writeFileSync(heartbeatPath, DEFAULT_HEARTBEAT_MD, "utf-8");
+    }
   }
 
   /** Check if a workspace exists for a user. */

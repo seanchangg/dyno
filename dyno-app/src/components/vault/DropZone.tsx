@@ -7,7 +7,7 @@ interface DropZoneProps {
   disabled?: boolean;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 
 export default function DropZone({ onUpload, disabled }: DropZoneProps) {
   const [dragging, setDragging] = useState(false);
@@ -19,7 +19,7 @@ export default function DropZone({ onUpload, disabled }: DropZoneProps) {
     async (file: File) => {
       setError(null);
       if (file.size > MAX_FILE_SIZE) {
-        setError("File too large (max 10MB)");
+        setError("File too large (max 200MB)");
         return;
       }
       setUploading(true);
@@ -93,7 +93,7 @@ export default function DropZone({ onUpload, disabled }: DropZoneProps) {
           <p className="text-sm text-text/60">
             Drop a file here or click to browse
           </p>
-          <p className="text-xs text-text/30 mt-1">Max 10MB per file</p>
+          <p className="text-xs text-text/30 mt-1">Max 200MB per file</p>
         </>
       )}
       {error && <p className="text-xs text-red-400 mt-2">{error}</p>}

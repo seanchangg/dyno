@@ -93,6 +93,51 @@ export class ActivityLogger {
       });
   }
 
+  /** Log a heartbeat tick to heartbeat_log. */
+  logHeartbeat(params: {
+    userId: string;
+    triageModel: string;
+    triageTokensIn: number;
+    triageTokensOut: number;
+    escalated: boolean;
+    actionModel?: string;
+    actionTokensIn?: number;
+    actionTokensOut?: number;
+    totalCostUsd: number;
+    summary?: string;
+    status: string;
+  }): void {
+    this.supabase
+      .from("heartbeat_log")
+      .insert({
+        user_id: params.userId,
+        triage_model: params.triageModel,
+        triage_tokens_in: params.triageTokensIn,
+        triage_tokens_out: params.triageTokensOut,
+        escalated: params.escalated,
+        action_model: params.actionModel ?? null,
+        action_tokens_in: params.actionTokensIn ?? 0,
+        action_tokens_out: params.actionTokensOut ?? 0,
+        total_cost_usd: params.totalCostUsd,
+        summary: params.summary ?? null,
+        status: params.status,
+      })
+      .then(({ error }) => {
+        if (error) console.warn("[activity-logger] logHeartbeat error:", error.message);
+      });
+  }
+
+  /** Get today's heartbeat cost for a user via RPC. */
+  async getDailyHeartbeatCost(userId: string): Promise<number> {
+    const { data, error } = await this.supabase
+      .rpc("get_daily_heartbeat_cost", { p_user_id: userId });
+    if (error) {
+      console.warn("[activity-logger] getDailyHeartbeatCost error:", error.message);
+      return 0;
+    }
+    return Number(data) || 0;
+  }
+
   /** Run cleanup on old activity and child sessions. */
   runCleanup(): void {
     this.supabase
@@ -111,6 +156,12 @@ export class ActivityLogger {
       .rpc("cleanup_old_webhooks")
       .then(({ error }) => {
         if (error) console.warn("[activity-logger] cleanup_old_webhooks error:", error.message);
+      });
+
+    this.supabase
+      .rpc("cleanup_old_heartbeat_logs")
+      .then(({ error }) => {
+        if (error) console.warn("[activity-logger] cleanup_old_heartbeat_logs error:", error.message);
       });
   }
 }

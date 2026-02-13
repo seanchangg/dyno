@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { initializeDefaultContext } from "@/lib/dyno-fs";
+import { initializeUserContext } from "@/lib/dyno-fs";
 
 export async function POST(req: NextRequest) {
   const { email, password, username, fullName } = await req.json();
@@ -72,9 +72,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await initializeDefaultContext(fullName);
+    await initializeUserContext(userId, fullName);
   } catch {
-    // Non-critical
+    // Non-critical — workspace will be provisioned on first gateway connect
   }
 
   return NextResponse.json({ ok: true });

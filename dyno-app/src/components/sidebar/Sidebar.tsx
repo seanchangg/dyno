@@ -10,7 +10,7 @@ const baseNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/skills", label: "Skills", icon: Puzzle },
   { href: "/context", label: "Context", icon: FileText },
-  { href: "/vault", label: "Vault", icon: HardDrive },
+  { href: "/vault", label: "Files", icon: HardDrive },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

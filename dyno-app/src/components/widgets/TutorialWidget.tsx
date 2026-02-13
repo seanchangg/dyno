@@ -6,7 +6,7 @@ const EXAMPLE_PROMPTS = [
   {
     category: "Build",
     prompts: [
-      "Create a music player widget that lets me search and play music using the YouTube HTML embed API, and give yourself backend access to manage playlists",
+      "Create a music widget that lets me search for and play music using Youtube iFrame API and scraping",
       "Build me a pomodoro timer widget with start/pause/reset and a log of completed sessions",
       "Make a weather dashboard widget that shows the forecast for my city",
     ],

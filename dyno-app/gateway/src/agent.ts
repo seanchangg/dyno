@@ -125,6 +125,7 @@ export class GatewayAgent {
   private systemPrompt: string;
   private toolDescriptionsAppendix: string;
   private skillsPrompt: string;
+  private soulPrompt: string;
   private orchestration: OrchestrationHandler | null = null;
   private sendFn: SendFn | null = null;
   private userId: string | null = null;
@@ -140,6 +141,7 @@ export class GatewayAgent {
     this.systemPrompt = "You are a helpful AI agent managed through Marty.";
     this.toolDescriptionsAppendix = "";
     this.skillsPrompt = "";
+    this.soulPrompt = "";
   }
 
   /** Connect to the legacy Python tool bridge. */
@@ -178,6 +180,11 @@ export class GatewayAgent {
   /** Set skills prompt (only injected in Phase 2 / build, not Phase 1). */
   setSkillsPrompt(prompt: string) {
     this.skillsPrompt = prompt;
+  }
+
+  /** Set soul prompt — prepended to system prompt for persistent identity. */
+  setSoulPrompt(prompt: string) {
+    this.soulPrompt = prompt;
   }
 
   /** Set tool permission overrides. */
@@ -302,6 +309,30 @@ export class GatewayAgent {
     return lines.join("\n");
   }
 
+  // ── Core state auto-injection ───────────────────────────────────────────────
+
+  /**
+   * Fetch the "core-state" memory tag for this user. Returns the content
+   * string or empty string on failure. Best-effort — never blocks chat.
+   */
+  private async fetchCoreState(userId: string): Promise<string> {
+    if (!this.toolBridge || !userId) return "";
+    try {
+      const raw = await this.toolBridge.executeTool(
+        "recall_memories",
+        { userId, tag: "core-state" },
+        userId,
+      );
+      // The tool returns "[core-state] <content>" or "No memory found..."
+      if (raw.startsWith("No memory") || raw.startsWith("Error")) return "";
+      // Strip the "[core-state] " prefix if present
+      const content = raw.replace(/^\[core-state\]\s*/, "");
+      return content.trim();
+    } catch {
+      return "";
+    }
+  }
+
   // ── Chat (Phase 1 lightweight → Phase 2 full) ─────────────────────────────
 
   async runChat(req: ChatRequest): Promise<void> {
@@ -315,10 +346,20 @@ export class GatewayAgent {
 
     let systemPrompt = "";
     if (includeSystemContext !== false) {
-      systemPrompt = this.systemPrompt;
+      systemPrompt = this.soulPrompt
+        ? `${this.soulPrompt}\n\n---\n\n${this.systemPrompt}`
+        : this.systemPrompt;
     }
     if (userId) {
       systemPrompt += `\n\nThe current user's ID is: ${userId}`;
+
+      // Auto-inject core-state memory (best-effort, non-blocking on failure)
+      const coreState = await this.fetchCoreState(userId);
+      if (coreState) {
+        systemPrompt += `\n\n## Core State\nThis is your persistent awareness from previous sessions. Use it to stay consistent.\nIMPORTANT: When you learn something new about the user (preferences, projects, context, corrections) or complete significant work, proactively update your core-state by calling save_memory with tag "core-state". You do not need to be asked — maintaining your own memory is part of being an autonomous agent.\n${coreState}`;
+      } else {
+        systemPrompt += `\n\n## Core State\nYou have no core-state memory yet. After this conversation, use save_memory with tag "core-state" to record key facts about the user and any important context. This persists across sessions and is how you maintain continuity.`;
+      }
     }
 
     const chatHistory: Anthropic.MessageParam[] = (history || []).map((m) => ({
@@ -455,7 +496,10 @@ export class GatewayAgent {
 
     const skillsBlock = this.skillsPrompt ? `\n\n${this.skillsPrompt}` : "";
     const permsBlock = `\n\n${this.buildToolPermissionsBlock()}`;
-    let systemPrompt = `${this.systemPrompt}\n\n${this.toolDescriptionsAppendix}${skillsBlock}${permsBlock}`;
+    const basePrompt = this.soulPrompt
+      ? `${this.soulPrompt}\n\n---\n\n${this.systemPrompt}`
+      : this.systemPrompt;
+    let systemPrompt = `${basePrompt}\n\n${this.toolDescriptionsAppendix}${skillsBlock}${permsBlock}`;
     if (userId) {
       systemPrompt += `\n\nThe current user's ID is: ${userId}`;
     }

@@ -474,7 +474,7 @@ export class OrchestrationHandler {
         system: cachedSystem,
         tools: childTools,
         messages: child.messages,
-        ...(isOpus ? { output_config: { effort: "medium" } } : {}),
+        ...(isOpus ? { output_config: { effort: "high" } } : {}),
       });
 
       if (response.usage) {
@@ -709,8 +709,12 @@ export class OrchestrationHandler {
   private async handleGetDashboardLayout(): Promise<string> {
     try {
       const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const serviceKey = process.env.INTERNAL_API_KEY || process.env.GATEWAY_KEY_STORE_SECRET || "dyno-dev-secret-change-in-production";
       const res = await fetch(`${frontendUrl}/api/layout`, {
-        headers: { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+          "x-service-key": serviceKey,
+        },
         signal: AbortSignal.timeout(5000),
       });
       const data = await res.json() as Record<string, unknown>;

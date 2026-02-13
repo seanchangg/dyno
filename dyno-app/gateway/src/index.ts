@@ -46,6 +46,7 @@ import { SkillRegistry } from "./skills/registry.js";
 import { SkillLoader } from "./skills/loader.js";
 import { ToolPermissions } from "./tool-permissions.js";
 import { ORCHESTRATION_TOOL_DEFS, ORCHESTRATION_TOOL_NAMES, ORCHESTRATION_AUTO_APPROVED } from "./orchestration.js";
+import { HeartbeatDaemon, type HeartbeatConfig } from "./heartbeat.js";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,107 @@ function handleToolPermissions(
   return false;
 }
 
+// ── Heartbeat config internal endpoint ────────────────────────────────────
+
+interface HeartbeatConfigDeps {
+  heartbeatDaemon: HeartbeatDaemon;
+  agentManager: AgentManager;
+  internalSecret: string;
+}
+
+function handleHeartbeatConfig(
+  req: IncomingMessage,
+  res: ServerResponse,
+  deps: HeartbeatConfigDeps
+): boolean {
+  const url = req.url || "";
+  if (!url.startsWith("/internal/heartbeat-config")) return false;
+
+  const headers = {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, headers);
+    res.end();
+    return true;
+  }
+
+  if (req.method !== "POST") {
+    const body = JSON.stringify({ error: "Method not allowed" });
+    res.writeHead(405, { ...headers, "Content-Length": Buffer.byteLength(body) });
+    res.end(body);
+    return true;
+  }
+
+  // Validate internal secret
+  const authHeader = req.headers["authorization"] || "";
+  const providedSecret = authHeader.replace(/^Bearer\s+/i, "");
+  if (!deps.internalSecret || providedSecret !== deps.internalSecret) {
+    const body = JSON.stringify({ error: "Forbidden" });
+    res.writeHead(403, { ...headers, "Content-Length": Buffer.byteLength(body) });
+    res.end(body);
+    return true;
+  }
+
+  let data = "";
+  req.on("data", (chunk: string) => { data += chunk; });
+  req.on("end", async () => {
+    try {
+      const parsed = JSON.parse(data);
+      const { action, userId, config } = parsed;
+
+      if (action === "start" && userId && config) {
+        // Persist API key server-side if provided (user consented to autonomous storage)
+        const { apiKey } = parsed;
+        if (apiKey) {
+          await deps.agentManager.persistApiKey(userId, apiKey);
+          console.log(`[heartbeat-config] Persisted API key for user ${userId}`);
+        }
+
+        const hbConfig: HeartbeatConfig = {
+          userId,
+          intervalMinutes: config.heartbeatIntervalMinutes ?? 30,
+          dailyBudgetCapUsd: config.dailyBudgetCapUsd ?? null,
+          triageModel: config.triageModel ?? "claude-haiku-4-5-20251001",
+          escalationModel: config.escalationModel ?? "claude-sonnet-4-5-20250929",
+        };
+        deps.heartbeatDaemon.startHeartbeat(hbConfig);
+        const body = JSON.stringify({ ok: true, action: "started" });
+        res.writeHead(200, { ...headers, "Content-Length": Buffer.byteLength(body) });
+        res.end(body);
+      } else if (action === "stop" && userId) {
+        // Remove server-side API key when autonomous mode is disabled
+        await deps.agentManager.clearPersistedApiKey(userId);
+        console.log(`[heartbeat-config] Cleared persisted API key for user ${userId}`);
+
+        deps.heartbeatDaemon.stopHeartbeat(userId);
+        const body = JSON.stringify({ ok: true, action: "stopped" });
+        res.writeHead(200, { ...headers, "Content-Length": Buffer.byteLength(body) });
+        res.end(body);
+      } else if (action === "status" && userId) {
+        const active = deps.heartbeatDaemon.isActive(userId);
+        const body = JSON.stringify({ ok: true, active });
+        res.writeHead(200, { ...headers, "Content-Length": Buffer.byteLength(body) });
+        res.end(body);
+      } else {
+        const body = JSON.stringify({ error: "Invalid action. Use start, stop, or status." });
+        res.writeHead(400, { ...headers, "Content-Length": Buffer.byteLength(body) });
+        res.end(body);
+      }
+    } catch {
+      const body = JSON.stringify({ error: "Invalid JSON" });
+      res.writeHead(400, { ...headers, "Content-Length": Buffer.byteLength(body) });
+      res.end(body);
+    }
+  });
+
+  return true;
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -230,7 +332,7 @@ async function main() {
     defaultModel: config.agent.model,
     maxTokens: config.agent.maxTokens,
     maxIterations: config.agent.maxIterations,
-  });
+  }, credentialStore);
 
   // Initialize Supabase verifier (optional — falls back to userId from messages)
   const jwtSecret = process.env.SUPABASE_JWT_SECRET || "";
@@ -295,6 +397,17 @@ async function main() {
     });
   }
 
+  // Initialize heartbeat daemon (after legacyBridge + toolPermissions are available)
+  const heartbeatDaemon = new HeartbeatDaemon({
+    agentManager,
+    userChannels,
+    legacyBridge,
+    activityLogger,
+    toolPermissions,
+    workspacesPath,
+  });
+  console.log("[gateway] Heartbeat daemon initialized");
+
   // HTTP server for health checks, admin API, and WebSocket upgrade
   const healthCtx: HealthContext = { agentManager, legacyBridge, toolPermissions };
 
@@ -316,6 +429,10 @@ async function main() {
     // Skills API
     const skillsHandled = await handleSkillsRequest(req, res, { registry: skillRegistry });
     if (skillsHandled) return;
+
+    // Internal heartbeat config (from Next.js → Gateway)
+    const heartbeatInternalSecret = process.env.WEBHOOK_INTERNAL_SECRET || keyStoreSecret;
+    if (handleHeartbeatConfig(req, res, { heartbeatDaemon, agentManager, internalSecret: heartbeatInternalSecret })) return;
 
     // Internal webhook notification (from Next.js → Gateway)
     const webhookInternalSecret = process.env.WEBHOOK_INTERNAL_SECRET || keyStoreSecret;
@@ -339,7 +456,7 @@ async function main() {
 
   const wss = new WebSocketServer({ server: httpServer });
 
-  wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+  wss.on("connection", async (ws: WebSocket, req: IncomingMessage) => {
     activeConnections++;
 
     // Try to authenticate via JWT
@@ -357,7 +474,7 @@ async function main() {
     // Get or create agent for this connection
     // If authenticated, use per-user agent; otherwise use a shared agent
     const agent = authenticatedUserId
-      ? agentManager.getOrCreateAgent(authenticatedUserId)
+      ? await agentManager.getOrCreateAgent(authenticatedUserId)
       : new GatewayAgent(config.agent);
 
     // Set up tool bridge on the agent
@@ -464,6 +581,7 @@ async function main() {
   // Graceful shutdown
   process.on("SIGINT", () => {
     console.log("\n[gateway] Shutting down...");
+    heartbeatDaemon.shutdown();
     agentManager.shutdown();
     if (legacyBridge) legacyBridge.disconnect();
     httpServer.close();

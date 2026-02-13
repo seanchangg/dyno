@@ -7,6 +7,12 @@ export interface ChatSettings {
   maxStoredMessages: number;
   includeSystemContext: boolean;
   includeToolDescriptions: boolean;
+  // Autonomous (Dangerous) Mode
+  autonomousEnabled: boolean;
+  heartbeatIntervalMinutes: number;
+  dailyBudgetCapUsd: number | null;
+  triageModel: string;
+  escalationModel: string;
 }
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
@@ -14,6 +20,11 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   maxStoredMessages: 200,
   includeSystemContext: true,
   includeToolDescriptions: false,
+  autonomousEnabled: false,
+  heartbeatIntervalMinutes: 30,
+  dailyBudgetCapUsd: null,
+  triageModel: "claude-haiku-4-5-20251001",
+  escalationModel: "claude-sonnet-4-5-20250929",
 };
 
 export interface Profile {

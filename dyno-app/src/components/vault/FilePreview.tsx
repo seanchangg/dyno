@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { VaultFile } from "@/hooks/useVaultFiles";
+import type { BucketName } from "@/hooks/useStorageFiles";
 
 interface FilePreviewProps {
   file: VaultFile;
   userId: string;
   onClose: () => void;
+  bucket?: BucketName;
 }
 
 const TEXT_EXTENSIONS = new Set([
@@ -33,7 +35,7 @@ type PreviewState =
   | { status: "loaded"; content: string }
   | { status: "error"; message: string };
 
-export default function FilePreview({ file, userId, onClose }: FilePreviewProps) {
+export default function FilePreview({ file, userId, onClose, bucket = "uploads" }: FilePreviewProps) {
   const [preview, setPreview] = useState<PreviewState>({ status: "idle" });
   const abortRef = useRef<AbortController | null>(null);
 
@@ -46,10 +48,11 @@ export default function FilePreview({ file, userId, onClose }: FilePreviewProps)
 
     setPreview({ status: "loading" });
     try {
-      const res = await fetch(
-        `/api/uploads/preview?filename=${encodeURIComponent(filename)}&userId=${encodeURIComponent(uid)}`,
-        { signal: controller.signal },
-      );
+      const url =
+        bucket === "uploads"
+          ? `/api/uploads/preview?filename=${encodeURIComponent(filename)}&userId=${encodeURIComponent(uid)}`
+          : `/api/storage/preview?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(filename)}&userId=${encodeURIComponent(uid)}`;
+      const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Preview failed");
@@ -63,7 +66,7 @@ export default function FilePreview({ file, userId, onClose }: FilePreviewProps)
         setPreview({ status: "error", message: err instanceof Error ? err.message : "Preview failed" });
       }
     }
-  }, []);
+  }, [bucket]);
 
   useEffect(() => {
     if (!canPreview) return;

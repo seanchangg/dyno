@@ -107,7 +107,7 @@ export async function handleWebhookNotify(
     }
 
     // ── Check API key ────────────────────────────────────────────────────
-    const apiKey = deps.agentManager.getApiKey(userId);
+    const apiKey = await deps.agentManager.getApiKey(userId);
     if (!apiKey) {
       console.warn(`[webhook-notify] No API key for user ${userId}, queuing only`);
       sendJson(res, 200, { ok: true, processed: false, reason: "no_api_key" });
@@ -141,7 +141,7 @@ export async function handleWebhookNotify(
     }
 
     // ── Set up agent ─────────────────────────────────────────────────────
-    const agent = deps.agentManager.getOrCreateAgent(userId);
+    const agent = await deps.agentManager.getOrCreateAgent(userId);
 
     if (deps.legacyBridge) {
       agent.setToolBridge(deps.legacyBridge);
