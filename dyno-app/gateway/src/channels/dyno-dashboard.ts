@@ -46,6 +46,8 @@ export class DynoDashboardChannel {
   private userId: string | null = null;
   private activityLogger: ActivityLogger | null;
   private toolCallTimestamps = new Map<string, { tool: string; input: Record<string, unknown>; time: number }>();
+  /** Buffer of thinking/tool events per session, replayed on reconnect. */
+  private thinkingBuffer = new Map<string, Record<string, unknown>[]>();
 
   constructor(ws: WebSocket, agent: GatewayAgent, activityLogger?: ActivityLogger | null) {
     this.ws = ws;
@@ -274,10 +276,12 @@ export class DynoDashboardChannel {
     switch (type) {
       case "thinking":
         this.send({ type: "thinking", ...outPayload });
+        this.bufferThinkingEvent(sessionId, { type: "thinking", ...outPayload });
         return null;
 
       case "tool_call":
         this.send({ type: "tool_call", ...outPayload });
+        this.bufferThinkingEvent(sessionId, { type: "tool_call", ...outPayload });
         // Track start time for duration calculation
         if (payload.id) {
           this.toolCallTimestamps.set(payload.id as string, {
@@ -290,14 +294,7 @@ export class DynoDashboardChannel {
 
       case "tool_result":
         this.send({ type: "tool_result", ...outPayload });
-        // Surface tool errors as visible errors so the user knows something failed
-        if (payload.isError) {
-          this.send({
-            type: "error",
-            sessionId,
-            message: `Tool "${payload.tool}" failed: ${String(payload.result).slice(0, 200)}`,
-          });
-        }
+        this.bufferThinkingEvent(sessionId, { type: "tool_result", ...outPayload });
         // Log tool call to activity logger
         if (this.activityLogger && this.userId && payload.id) {
           const start = this.toolCallTimestamps.get(payload.id as string);
@@ -354,6 +351,8 @@ export class DynoDashboardChannel {
         return null;
 
       case "done":
+        // Response complete — clear thinking buffer for this session
+        this.thinkingBuffer.delete(sessionId);
         // For master sessions, convert "done" to "chat_response" so the frontend
         // adds the response as a visible message (matching Python backend behavior)
         if (sessionId === "master") {
@@ -370,6 +369,7 @@ export class DynoDashboardChannel {
         return null;
 
       case "chat_response":
+        this.thinkingBuffer.delete(sessionId);
         this.send({ type: "chat_response", ...outPayload });
         return null;
 
@@ -404,7 +404,18 @@ export class DynoDashboardChannel {
     }
   }
 
-  /** Cleanup pending approvals on disconnect. */
+  /** Buffer a thinking/tool event for replay on reconnect. */
+  private bufferThinkingEvent(sessionId: string, event: Record<string, unknown>) {
+    let buf = this.thinkingBuffer.get(sessionId);
+    if (!buf) {
+      buf = [];
+      this.thinkingBuffer.set(sessionId, buf);
+    }
+    buf.push(event);
+    // Cap at 500 events per session to avoid unbounded growth
+    if (buf.length > 500) buf.shift();
+  }
+
   /** Send an event to the connected frontend (used by internal services). */
   sendEvent(payload: Record<string, unknown>) {
     this.send(payload);
@@ -441,6 +452,19 @@ export class DynoDashboardChannel {
             model: child.model,
           });
         }
+      }
+    }
+
+    // If the master session has buffered thinking, it's still working —
+    // tell the frontend so it shows the loading state
+    if (this.thinkingBuffer.has("master")) {
+      this.send({ type: "session_status", sessionId: "master", status: "running" });
+    }
+
+    // Replay buffered thinking events so the frontend shows in-progress traces
+    for (const [, events] of this.thinkingBuffer) {
+      for (const event of events) {
+        this.send(event);
       }
     }
 

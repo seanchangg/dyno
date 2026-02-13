@@ -1,6 +1,5 @@
-anthropic>=0.39.0
-websockets>=13.0
-playwright>=1.40.0
+# Execution-only packages for the Docker sandbox.
+# Excludes MCP server packages (anthropic, websockets, playwright).
 
 # HTTP & APIs
 requests>=2.31.0

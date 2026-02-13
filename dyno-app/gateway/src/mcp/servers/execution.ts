@@ -1,3 +1,5 @@
+// DEPRECATED: All execution flows through Python MCP server. See python/tools/execution.py.
+
 /**
  * Code Execution MCP Server — Sandboxed code execution.
  *
@@ -10,19 +12,18 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, unlink
 import { resolve } from "path";
 
 // ── Environment sanitization ────────────────────────────────────────────────
-// Strip secrets from subprocess environment so bot-executed code can't read them.
-const SENSITIVE_ENV_KEYS = new Set([
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "SUPABASE_JWT_SECRET",
-  "GATEWAY_KEY_STORE_SECRET",
-  "ANTHROPIC_API_KEY",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+// Allowlist approach: only expose env vars that code execution legitimately needs.
+const ALLOWED_ENV_KEYS = new Set([
+  "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR",
+  "HOME", "USER", "SHELL", "PYTHONDONTWRITEBYTECODE",
+  "VIRTUAL_ENV",
 ]);
 
 function getSafeEnv(): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [key, val] of Object.entries(process.env)) {
-    if (val !== undefined && !SENSITIVE_ENV_KEYS.has(key)) {
+  for (const key of ALLOWED_ENV_KEYS) {
+    const val = process.env[key];
+    if (val !== undefined) {
       env[key] = val;
     }
   }
@@ -96,8 +97,9 @@ export function createHandlers(scriptsDir: string) {
     bash: ".sh",
   };
 
+  const pythonCmd = process.env.PYTHON_EXECUTABLE || "python3";
   const langCmd: Record<string, string> = {
-    python: "python3",
+    python: pythonCmd,
     javascript: "node",
     typescript: "npx tsx",
     bash: "bash",

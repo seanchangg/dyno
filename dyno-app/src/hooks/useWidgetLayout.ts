@@ -113,9 +113,9 @@ function layoutReducer(state: TabbedLayout, action: LayoutAction): TabbedLayout 
         case "tab_delete": {
           const targetId = a.tabId || state.activeTabId;
           if (state.tabs.length <= 1) return state; // min 1 tab
-          // Block deletion of tabs containing protected widgets
+          // Block deletion of the Main tab
           const targetTab = state.tabs.find((t) => t.id === targetId);
-          if (targetTab?.widgets.some((w) => PROTECTED_WIDGET_IDS.has(w.id))) return state;
+          if (targetTab?.label === "Main") return state;
           const remaining = state.tabs.filter((t) => t.id !== targetId);
           const newActive =
             state.activeTabId === targetId

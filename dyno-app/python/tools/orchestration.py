@@ -178,7 +178,12 @@ TOOL_DEFS = [
             "- table: 6w x 4h (min 3x2) — tabular data. Props: {columns, rows}\n"
             "- html: 6w x 5h (min 2x2) — render arbitrary HTML/JS in sandboxed iframe. "
             "Props: {html} for inline HTML, or {src} for a URL (e.g. /api/widget-html/chart.html). "
-            "Bot can write HTML files to data/widgets/ then reference them here.\n"
+            "Bot can write HTML files to data/widgets/ then reference them here. "
+            "HTML widgets render in the BROWSER but can call backend scripts via "
+            "fetch('/api/widget-exec') which runs saved scripts (save_script) in the Docker sandbox. "
+            "The frontend is HTML/CSS/JS only — do NOT pip install packages in execute_code and "
+            "expect them in widget frontend code. Python packages (pandas, numpy, etc.) are available "
+            "in backend scripts called through widget-exec, not in the browser.\n"
             "- agent-control: 8w x 7h (min 6x5) — agent monitoring dashboard\n"
         ),
         "input_schema": {

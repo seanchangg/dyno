@@ -8,6 +8,7 @@ interface SkillCardProps {
   onInstall: () => void;
   onUninstall: () => void;
   onViewDetail: () => void;
+  expanded?: boolean;
 }
 
 export default function SkillCard({
@@ -16,6 +17,7 @@ export default function SkillCard({
   onInstall,
   onUninstall,
   onViewDetail,
+  expanded,
 }: SkillCardProps) {
   const tierColors = {
     bundled: "text-highlight",
@@ -24,7 +26,7 @@ export default function SkillCard({
   };
 
   return (
-    <div className="bg-surface border border-primary/20 p-4 flex flex-col gap-3">
+    <div className={`bg-surface border border-primary/20 p-4 flex flex-col gap-3${expanded ? " border-b-0" : ""}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <button

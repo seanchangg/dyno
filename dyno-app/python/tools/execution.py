@@ -3,11 +3,16 @@
 Supports one-off execution (execute_code) and persistent scripts that can
 be saved, listed, and re-run to avoid burning inference tokens on repetitive
 tasks.
+
+When SANDBOX_MODE=docker (the default), all code runs inside a disposable
+Docker container with no access to host secrets, filesystem, or services.
+Set SANDBOX_MODE=unsafe to fall back to bare subprocess execution (dev only).
 """
 
 import asyncio
 import json
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -17,46 +22,177 @@ from ._common import DATA_DIR, STORAGE_MODE, SCRIPTS_BUCKET
 SCRIPTS_DIR = DATA_DIR / "scripts"
 SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── Environment sanitization for subprocess execution ─────────────────────────
-# In cloud mode, strip secrets from the environment so user code can't read them.
+# ── Sandbox configuration ─────────────────────────────────────────────────────
 
-_SENSITIVE_ENV_KEYS = {
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "SUPABASE_JWT_SECRET",
-    "GATEWAY_KEY_STORE_SECRET",
-    "ANTHROPIC_API_KEY",
+SANDBOX_MODE = os.getenv("SANDBOX_MODE", "docker")
+SANDBOX_IMAGE = "dyno-sandbox:latest"
+SANDBOX_DIR = Path(__file__).resolve().parent.parent / "sandbox"
+
+_sandbox_ready = False
+
+# ── Environment sanitization for subprocess execution ─────────────────────────
+# Allowlist approach: only expose env vars that code execution legitimately needs.
+# Everything else (secrets, internal keys, project paths) is stripped.
+
+_ALLOWED_ENV_KEYS = {
+    "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR",
+    "HOME", "USER", "SHELL", "PYTHONDONTWRITEBYTECODE",
+    "VIRTUAL_ENV",  # needed so venv Python resolves packages correctly
 }
 
 
 def _get_safe_env() -> dict[str, str] | None:
     """Return a sanitized environment dict for subprocess execution.
 
-    In cloud mode, strips sensitive keys. In local mode, returns None
-    (inherit parent env as-is for developer convenience).
+    Uses an allowlist: only known-safe env vars are passed through.
+    In local mode, also allows through for developer convenience, but
+    still strips secrets.
     """
-    if STORAGE_MODE != "cloud":
-        return None
-    env = dict(os.environ)
-    for key in _SENSITIVE_ENV_KEYS:
-        env.pop(key, None)
+    env = {}
+    for key in _ALLOWED_ENV_KEYS:
+        val = os.environ.get(key)
+        if val is not None:
+            env[key] = val
     return env
 
 _LANG_CONFIG = {
-    "python": {"ext": ".py", "cmd": ["python3"]},
+    "python": {"ext": ".py", "cmd": [sys.executable]},
     "bash": {"ext": ".sh", "cmd": ["bash"]},
     "javascript": {"ext": ".js", "cmd": ["node"]},
     "typescript": {"ext": ".ts", "cmd": ["npx", "tsx"]},
     "cpp": {"ext": ".cpp", "cmd": None, "compiled": True},
 }
 
+# Map file extension → language name for the Docker entrypoint
+_EXT_TO_LANG = {cfg["ext"]: lang for lang, cfg in _LANG_CONFIG.items()}
 
-async def _run_file(
+
+# ── Docker sandbox helpers ────────────────────────────────────────────────────
+
+async def _ensure_sandbox_image() -> None:
+    """Build the sandbox Docker image if it doesn't already exist."""
+    global _sandbox_ready
+    if _sandbox_ready:
+        return
+
+    # Check if image exists
+    check = await asyncio.create_subprocess_exec(
+        "docker", "image", "inspect", SANDBOX_IMAGE,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await check.wait()
+
+    if check.returncode != 0:
+        print(f"[sandbox] Building image {SANDBOX_IMAGE} from {SANDBOX_DIR} …")
+        build = await asyncio.create_subprocess_exec(
+            "docker", "build", "-t", SANDBOX_IMAGE, str(SANDBOX_DIR),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        b_stdout, b_stderr = await build.communicate()
+        if build.returncode != 0:
+            raise RuntimeError(
+                f"Failed to build sandbox image:\n"
+                f"{b_stderr.decode('utf-8', errors='replace')}"
+            )
+        print(f"[sandbox] Image built successfully.")
+
+    _sandbox_ready = True
+
+
+async def _run_file_docker(
+    filepath: str,
+    timeout: int,
+    language: str,
+    args: list[str] | None = None,
+    stdin_data: str | None = None,
+) -> dict:
+    """Execute a file inside a disposable Docker container.
+
+    The container gets:
+    - No host filesystem access (only the script file mounted read-only)
+    - Internet but host services blocked
+    - Resource limits: 512 MB memory, 1 CPU, 64 PIDs
+    - Read-only root FS + writable /tmp and /workspace (tmpfs)
+    - Non-root ``sandbox`` user, no env vars from host
+    """
+    await _ensure_sandbox_image()
+
+    ext = Path(filepath).suffix
+    container_script = f"/workspace/script{ext}"
+
+    docker_cmd = [
+        "docker", "run", "--rm",
+        "--network=bridge",
+        "--add-host=host.docker.internal:0.0.0.0",
+        "--memory=512m",
+        "--cpus=1.0",
+        "--pids-limit=64",
+        "--read-only",
+        "--tmpfs=/tmp:rw,exec,nosuid,size=100m",
+        "--tmpfs=/workspace:rw,exec,nosuid,size=50m",
+        "--security-opt=no-new-privileges",
+        "-v", f"{filepath}:{container_script}:ro",
+    ]
+
+    if stdin_data:
+        docker_cmd.append("-i")
+
+    docker_cmd.extend([
+        SANDBOX_IMAGE,
+        language,
+        container_script,
+        *(args or []),
+    ])
+
+    process = await asyncio.create_subprocess_exec(
+        *docker_cmd,
+        stdin=asyncio.subprocess.PIPE if stdin_data else None,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    # Allow extra time for Docker overhead
+    docker_timeout = timeout + 5
+
+    try:
+        stdin_bytes = stdin_data.encode("utf-8") if stdin_data else None
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(input=stdin_bytes), timeout=docker_timeout
+        )
+    except asyncio.TimeoutError:
+        process.kill()
+        # Also try to kill any lingering container (best-effort)
+        await asyncio.create_subprocess_exec(
+            "docker", "kill", "--signal=KILL",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        return {
+            "stdout": "",
+            "stderr": f"Execution timed out after {timeout}s",
+            "exit_code": -1,
+            "success": False,
+        }
+
+    return {
+        "stdout": stdout.decode("utf-8", errors="replace"),
+        "stderr": stderr.decode("utf-8", errors="replace"),
+        "exit_code": process.returncode,
+        "success": process.returncode == 0,
+    }
+
+
+# ── Unsafe (bare subprocess) execution — dev only ─────────────────────────────
+
+async def _run_file_unsafe(
     filepath: str,
     timeout: int,
     args: list[str] | None = None,
     stdin_data: str | None = None,
 ) -> dict:
-    """Execute a file and return stdout/stderr/exit_code.
+    """Execute a file directly as a host subprocess (UNSAFE — dev only).
 
     If *stdin_data* is provided it is piped to the process's stdin.
     C++ files (.cpp) are compiled with g++ first, then the binary is run.
@@ -141,6 +277,31 @@ async def _run_file(
         "exit_code": process.returncode,
         "success": process.returncode == 0,
     }
+
+
+# ── Dispatch: choose Docker or unsafe based on SANDBOX_MODE ──────────────────
+
+async def _run_file(
+    filepath: str,
+    timeout: int,
+    args: list[str] | None = None,
+    stdin_data: str | None = None,
+) -> dict:
+    """Execute a file and return {stdout, stderr, exit_code, success}.
+
+    Routes to Docker sandbox by default, or bare subprocess if
+    SANDBOX_MODE=unsafe.
+    """
+    if SANDBOX_MODE == "docker":
+        ext = Path(filepath).suffix
+        language = _EXT_TO_LANG.get(ext, "python")
+        return await _run_file_docker(
+            filepath, timeout, language, args=args, stdin_data=stdin_data,
+        )
+    else:
+        return await _run_file_unsafe(
+            filepath, timeout, args=args, stdin_data=stdin_data,
+        )
 
 
 # ── execute_code: one-off execution ─────────────────────────────────────────
@@ -448,8 +609,13 @@ TOOL_DEFS = [
         "description": (
             "Execute code (Python, JavaScript, TypeScript, Bash, or C++) in a temporary file. "
             "Returns stdout, stderr, and exit code. Good for one-off calculations, "
-            "data processing, or testing snippets. Code runs from the data/ directory. "
-            "Optionally pipe JSON data to the process via stdin_data."
+            "data processing, or testing snippets. Optionally pipe JSON data to the process via stdin_data.\n\n"
+            "IMPORTANT: Code runs in an isolated Docker container with pre-installed packages "
+            "(requests, pandas, numpy, matplotlib, Pillow, etc.). Each execution is a fresh "
+            "container — packages installed at runtime via pip are lost when execution ends. "
+            "Do NOT pip install packages in execute_code and expect them in later execute_code "
+            "or run_script calls. For widget backends, use save_script instead — saved scripts "
+            "run in the same Docker sandbox and have the same pre-installed packages."
         ),
         "input_schema": {
             "type": "object",

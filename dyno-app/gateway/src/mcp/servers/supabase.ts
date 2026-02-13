@@ -92,6 +92,19 @@ export interface SupabaseConfig {
   serviceRoleKey: string;
 }
 
+// Maps each table to its user-scoping column. "profiles" uses "id" as the user key.
+const USER_ID_COLUMN: Record<string, string> = {
+  profiles: "id",
+  agent_memories: "user_id",
+  agent_screenshots: "user_id",
+  token_usage: "user_id",
+  widget_layouts: "user_id",
+  user_credentials: "user_id",
+  agent_activity: "user_id",
+  child_sessions: "user_id",
+  token_usage_hourly: "user_id",
+};
+
 export function createHandlers(config: SupabaseConfig) {
   const headers = {
     apikey: config.serviceRoleKey,
@@ -123,11 +136,30 @@ export function createHandlers(config: SupabaseConfig) {
     }
   }
 
+  /** Inject user_id filter into a filters object, overwriting any existing value. */
+  function injectUserFilter(
+    table: string,
+    userId: string,
+    filters: Record<string, string>,
+  ): Record<string, string> {
+    const col = USER_ID_COLUMN[table];
+    if (!col) return filters;
+    return { ...filters, [col]: userId };
+  }
+
   return {
     async db_query(input: Record<string, unknown>): Promise<string> {
       const table = input.table as string;
+      const userId = input.userId as string | undefined;
+      const col = USER_ID_COLUMN[table];
+
+      if (!userId && col) {
+        return "Error: userId is required for user-scoped table queries";
+      }
+
       const select = (input.select as string) || "*";
-      const filters = (input.filters as Record<string, string>) || {};
+      let filters = (input.filters as Record<string, string>) || {};
+      if (userId) filters = injectUserFilter(table, userId, filters);
       const limit = input.limit as number;
       const order = input.order as string;
 
@@ -144,15 +176,36 @@ export function createHandlers(config: SupabaseConfig) {
 
     async db_insert(input: Record<string, unknown>): Promise<string> {
       const table = input.table as string;
-      const rows = input.rows as Record<string, unknown>[];
+      const userId = input.userId as string | undefined;
+      const col = USER_ID_COLUMN[table];
+
+      if (!userId && col) {
+        return "Error: userId is required for user-scoped table inserts";
+      }
+
+      let rows = input.rows as Record<string, unknown>[];
+      // Auto-inject user_id into every row
+      if (userId && col) {
+        rows = rows.map((row) => ({ ...row, [col]: userId }));
+      }
+
       const result = await supabaseRequest(table, "POST", rows);
       return JSON.stringify(result, null, 2);
     },
 
     async db_update(input: Record<string, unknown>): Promise<string> {
       const table = input.table as string;
-      const filters = input.filters as Record<string, string>;
+      const userId = input.userId as string | undefined;
+      const col = USER_ID_COLUMN[table];
+
+      if (!userId && col) {
+        return "Error: userId is required for user-scoped table updates";
+      }
+
+      let filters = input.filters as Record<string, string>;
       const values = input.values as Record<string, unknown>;
+
+      if (userId) filters = injectUserFilter(table, userId, filters);
 
       let path = table + "?";
       for (const [key, value] of Object.entries(filters)) {
@@ -165,7 +218,16 @@ export function createHandlers(config: SupabaseConfig) {
 
     async db_delete(input: Record<string, unknown>): Promise<string> {
       const table = input.table as string;
-      const filters = input.filters as Record<string, string>;
+      const userId = input.userId as string | undefined;
+      const col = USER_ID_COLUMN[table];
+
+      if (!userId && col) {
+        return "Error: userId is required for user-scoped table deletes";
+      }
+
+      let filters = input.filters as Record<string, string>;
+
+      if (userId) filters = injectUserFilter(table, userId, filters);
 
       let path = table + "?";
       for (const [key, value] of Object.entries(filters)) {

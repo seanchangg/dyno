@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import WidgetCanvas from "@/components/widgets/WidgetCanvas";
 import TabBar from "@/components/widgets/TabBar";
 import { useWidgetLayoutContext } from "@/hooks/useWidgetLayoutContext";
-import { PROTECTED_WIDGET_IDS } from "@/hooks/useWidgetLayout";
 import { useSession } from "@/hooks/useSessionManager";
 import { getAllWidgetTypes } from "@/lib/widgets/registry";
 import type { Widget } from "@/types/widget";
@@ -78,6 +77,8 @@ export default function PersistentDashboard() {
       if (widgetId.startsWith("chat-child-")) {
         const sessionId = widgetId.replace("chat-", "");
         cancelSession(sessionId);
+        // Clear persisted child session data
+        try { localStorage.removeItem(`marty-child-${sessionId}`); } catch { /* ignore */ }
       }
       processUIAction({ action: "remove", widgetId });
     },
@@ -130,9 +131,7 @@ export default function PersistentDashboard() {
   const nonCloseableTabIds = useMemo(() => {
     const ids = new Set<string>();
     for (const tab of layout.tabs) {
-      if (tab.widgets.some((w) => PROTECTED_WIDGET_IDS.has(w.id))) {
-        ids.add(tab.id);
-      }
+      if (tab.label === "Main") ids.add(tab.id);
     }
     return ids;
   }, [layout.tabs]);

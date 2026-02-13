@@ -305,8 +305,8 @@ async function main() {
     // Tool permissions API
     if (handleToolPermissions(req, res, toolPermissions)) return;
 
-    // Credentials API
-    const credHandled = await handleCredentialsRequest(req, res, { credentialStore });
+    // Credentials API (requires JWT auth)
+    const credHandled = await handleCredentialsRequest(req, res, { credentialStore, verifier });
     if (credHandled) return;
 
     // Widget execution API

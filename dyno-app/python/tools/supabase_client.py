@@ -18,6 +18,19 @@ _SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 _VALID_TABLES = {"profiles", "agent_memories", "agent_screenshots", "token_usage", "widget_layouts", "user_credentials", "agent_activity", "child_sessions", "token_usage_hourly"}
 
+# Maps each table to its user-scoping column. "profiles" uses "id" as the user key.
+_USER_ID_COLUMN: dict[str, str] = {
+    "profiles": "id",
+    "agent_memories": "user_id",
+    "agent_screenshots": "user_id",
+    "token_usage": "user_id",
+    "widget_layouts": "user_id",
+    "user_credentials": "user_id",
+    "agent_activity": "user_id",
+    "child_sessions": "user_id",
+    "token_usage_hourly": "user_id",
+}
+
 
 def _rest_url(table: str) -> str:
     return f"{_SUPABASE_URL}/rest/v1/{table}"
@@ -39,6 +52,16 @@ def _validate_table(table: str) -> str | None:
     if table not in _VALID_TABLES:
         return f"Error: Invalid table '{table}'. Valid tables: {', '.join(sorted(_VALID_TABLES))}"
     return None
+
+
+def _inject_user_filter(table: str, user_id: str, filters: dict[str, str] | None) -> dict[str, str]:
+    """Auto-inject user_id filter into a filters dict. Overwrites any existing user_id filter."""
+    col = _USER_ID_COLUMN.get(table)
+    if not col:
+        return filters or {}
+    result = dict(filters) if filters else {}
+    result[col] = f"eq.{user_id}"
+    return result
 
 
 def _build_query_string(filters: dict[str, str] | None, select: str | None,
@@ -188,7 +211,13 @@ async def handle_db_query(input_data: dict) -> str:
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
         return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
+    user_id = input_data.get("userId")
+    if not user_id and table in _USER_ID_COLUMN:
+        return "Error: userId is required for user-scoped table queries"
+
     filters = input_data.get("filters")
+    if user_id:
+        filters = _inject_user_filter(table, user_id, filters)
     select = input_data.get("select")
     order = input_data.get("order")
     limit = input_data.get("limit", 100)
@@ -216,9 +245,18 @@ async def handle_db_insert(input_data: dict) -> str:
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
         return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
+    user_id = input_data.get("userId")
+    if not user_id and table in _USER_ID_COLUMN:
+        return "Error: userId is required for user-scoped table inserts"
+
     rows = input_data.get("rows", [])
     if not rows:
         return "Error: rows array is required and must not be empty"
+
+    # Auto-inject user_id into every row
+    col = _USER_ID_COLUMN.get(table)
+    if user_id and col:
+        rows = [{**row, col: user_id} for row in rows]
 
     data = json.dumps(rows).encode()
     url = _rest_url(table)
@@ -243,9 +281,15 @@ async def handle_db_update(input_data: dict) -> str:
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
         return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
+    user_id = input_data.get("userId")
+    if not user_id and table in _USER_ID_COLUMN:
+        return "Error: userId is required for user-scoped table updates"
+
     filters = input_data.get("filters")
     if not filters:
         return "Error: filters are required to prevent accidental full-table updates"
+    if user_id:
+        filters = _inject_user_filter(table, user_id, filters)
 
     update_data = input_data.get("data", {})
     if not update_data:
@@ -276,9 +320,15 @@ async def handle_db_delete(input_data: dict) -> str:
     if not _SUPABASE_URL or not _SERVICE_ROLE_KEY:
         return "Error: Supabase credentials not configured (set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars)"
 
+    user_id = input_data.get("userId")
+    if not user_id and table in _USER_ID_COLUMN:
+        return "Error: userId is required for user-scoped table deletes"
+
     filters = input_data.get("filters")
     if not filters:
         return "Error: filters are required to prevent accidental full-table deletes"
+    if user_id:
+        filters = _inject_user_filter(table, user_id, filters)
 
     qs = _build_query_string(filters, None, None, None)
     url = _rest_url(table) + ("?" + qs if qs else "")

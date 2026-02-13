@@ -2,5 +2,6 @@
   "delete_memory": "auto",
   "ui_action": "auto",
   "fetch_url": "auto",
-  "spawn_agent": "auto"
+  "spawn_agent": "auto",
+  "save_script": "auto"
 }

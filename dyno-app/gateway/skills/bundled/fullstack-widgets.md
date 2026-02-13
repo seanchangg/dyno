@@ -187,9 +187,16 @@ ui_action action=add, type=html, props={ src: "/api/widget-html/my-widget.html" 
 
 ## Execution Environment Constraints
 
-Scripts run as subprocesses on the server with Python's standard library plus `requests`. Most pip packages are NOT available — do not assume `pandas`, `numpy`, `flask`, etc. exist.
+Scripts run in an isolated Docker container with a set of pre-installed packages including:
+`requests`, `httpx`, `beautifulsoup4`, `pandas`, `numpy`, `matplotlib`, `Pillow`, `qrcode`,
+`gTTS`, `PyPDF2`, `reportlab`, `python-docx`, `openpyxl`, `pyyaml`, `jinja2`, `cryptography`,
+and more (see `python/sandbox/requirements-sandbox.txt` for the full list).
 
-For HTTP requests in Python scripts, `requests` is available:
+Each execution is a fresh container — packages installed at runtime via `pip install` are lost
+when execution ends. Do NOT pip install packages and expect them in later calls. Only use the
+pre-installed packages.
+
+For HTTP requests in Python scripts, `requests` and `httpx` are available:
 ```python
 import requests, json
 r = requests.get(url)
@@ -219,7 +226,7 @@ Use this for dashboards, live feeds, or any widget that should stay current with
 
 ## Common Mistakes
 
-- **Assuming pip packages are available**: Only `requests` is installed beyond stdlib. Don't use `pandas`, `numpy`, `flask`, etc.
+- **pip installing at runtime**: Each execution is a fresh Docker container. `pip install` works but is lost immediately. Only pre-installed packages persist (pandas, numpy, matplotlib, etc. — see requirements-sandbox.txt). Do NOT pip install in execute_code and expect it in a widget backend script.
 - **Writing HTML to wrong path**: Must be `workspace/widgets/filename.html`, not just `workspace/filename.html`
 - **Using absolute URLs**: Always use relative `/api/` URLs in widget HTML
 - **Using srcDoc**: Only `src` mode iframes get `allow-same-origin`, which is required for fetch()

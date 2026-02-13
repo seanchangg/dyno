@@ -9,17 +9,50 @@
 
 import type { IncomingMessage, ServerResponse } from "http";
 import type { CredentialStore } from "../auth/credential-store.js";
+import type { SupabaseVerifier } from "../auth/supabase-verifier.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface CredentialsDeps {
   credentialStore: CredentialStore;
+  verifier: SupabaseVerifier | null;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_BODY_BYTES = 65_536; // 64 KB
 const CREDENTIAL_NAME_RE = /^[A-Z0-9_]{1,64}$/;
+
+// ── Auth helper ─────────────────────────────────────────────────────────────
+
+/**
+ * Verify the request's Authorization header and return the authenticated userId.
+ * Returns null and sends a 401 response if auth fails.
+ */
+function authenticateRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  verifier: SupabaseVerifier | null,
+): string | null {
+  if (!verifier) {
+    // No verifier configured — allow (dev mode). userId comes from body/query.
+    return "__skip__";
+  }
+
+  const authHeader = req.headers["authorization"] || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    sendJson(res, 401, { error: "Missing Authorization header" });
+    return null;
+  }
+
+  const result = verifier.verify(authHeader.slice(7));
+  if (!result.valid || !result.userId) {
+    sendJson(res, 401, { error: result.error || "Invalid token" });
+    return null;
+  }
+
+  return result.userId;
+}
 
 // ── Route handler ────────────────────────────────────────────────────────────
 
@@ -38,30 +71,34 @@ export async function handleCredentialsRequest(
     res.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, X-User-Id",
+      "Access-Control-Allow-Headers": "Content-Type, X-User-Id, Authorization",
     });
     res.end();
     return true;
   }
 
+  // Authenticate — all credential endpoints require a valid JWT
+  const authedUserId = authenticateRequest(req, res, deps.verifier);
+  if (authedUserId === null) return true; // 401 already sent
+
   // POST /api/credentials/retrieve — decrypt and return value
   if (url.startsWith("/api/credentials/retrieve") && method === "POST") {
-    return handleRetrieve(req, res, deps);
+    return handleRetrieve(req, res, deps, authedUserId);
   }
 
   // POST /api/credentials — store credential
   if (method === "POST") {
-    return handleStore(req, res, deps);
+    return handleStore(req, res, deps, authedUserId);
   }
 
   // GET /api/credentials?userId=X — list credential names
   if (method === "GET") {
-    return handleList(req, res, deps);
+    return handleList(req, res, deps, authedUserId);
   }
 
   // DELETE /api/credentials — remove credential
   if (method === "DELETE") {
-    return handleRemove(req, res, deps);
+    return handleRemove(req, res, deps, authedUserId);
   }
 
   sendJson(res, 405, { error: "Method not allowed" });
@@ -74,6 +111,7 @@ async function handleStore(
   req: IncomingMessage,
   res: ServerResponse,
   deps: CredentialsDeps,
+  authedUserId: string,
 ): Promise<boolean> {
   const body = await parseBody(req, res);
   if (!body) return true;
@@ -81,6 +119,12 @@ async function handleStore(
   const { userId, name, value } = body;
   if (!userId || !name || !value) {
     sendJson(res, 400, { error: "userId, name, and value are required" });
+    return true;
+  }
+
+  // Enforce: JWT userId must match request userId
+  if (authedUserId !== "__skip__" && authedUserId !== userId) {
+    sendJson(res, 403, { error: "userId does not match authenticated user" });
     return true;
   }
 
@@ -105,12 +149,18 @@ async function handleList(
   req: IncomingMessage,
   res: ServerResponse,
   deps: CredentialsDeps,
+  authedUserId: string,
 ): Promise<boolean> {
   const parsed = new URL(req.url || "", "http://localhost");
   const userId = parsed.searchParams.get("userId");
 
   if (!userId) {
     sendJson(res, 400, { error: "userId query parameter required" });
+    return true;
+  }
+
+  if (authedUserId !== "__skip__" && authedUserId !== userId) {
+    sendJson(res, 403, { error: "userId does not match authenticated user" });
     return true;
   }
 
@@ -128,6 +178,7 @@ async function handleRemove(
   req: IncomingMessage,
   res: ServerResponse,
   deps: CredentialsDeps,
+  authedUserId: string,
 ): Promise<boolean> {
   const body = await parseBody(req, res);
   if (!body) return true;
@@ -135,6 +186,11 @@ async function handleRemove(
   const { userId, name } = body;
   if (!userId || !name) {
     sendJson(res, 400, { error: "userId and name are required" });
+    return true;
+  }
+
+  if (authedUserId !== "__skip__" && authedUserId !== userId) {
+    sendJson(res, 403, { error: "userId does not match authenticated user" });
     return true;
   }
 
@@ -152,6 +208,7 @@ async function handleRetrieve(
   req: IncomingMessage,
   res: ServerResponse,
   deps: CredentialsDeps,
+  authedUserId: string,
 ): Promise<boolean> {
   const body = await parseBody(req, res);
   if (!body) return true;
@@ -159,6 +216,11 @@ async function handleRetrieve(
   const { userId, name } = body;
   if (!userId || !name) {
     sendJson(res, 400, { error: "userId and name are required" });
+    return true;
+  }
+
+  if (authedUserId !== "__skip__" && authedUserId !== userId) {
+    sendJson(res, 403, { error: "userId does not match authenticated user" });
     return true;
   }
 

@@ -18,6 +18,66 @@ import { WS_URL } from "@/lib/agent-config";
 import { authFetch } from "@/lib/api";
 
 const RECONNECT_DELAY_MS = 3000;
+const CHILD_SESSION_PREFIX = "marty-child-";
+
+// ── Child session localStorage persistence ──────────────────────────────────
+
+interface SavedChildSession {
+  messages: ChatMessage[];
+  tokensIn: number;
+  tokensOut: number;
+  model?: string;
+  status?: "running" | "completed" | "error" | "terminated";
+}
+
+function saveChildSession(sessionId: string, state: SessionState) {
+  try {
+    const data: SavedChildSession = {
+      messages: state.messages,
+      tokensIn: state.tokensIn,
+      tokensOut: state.tokensOut,
+      model: state.model,
+      status: state.status,
+    };
+    localStorage.setItem(CHILD_SESSION_PREFIX + sessionId, JSON.stringify(data));
+  } catch { /* quota exceeded or unavailable */ }
+}
+
+function loadChildSession(sessionId: string): SavedChildSession | null {
+  try {
+    const raw = localStorage.getItem(CHILD_SESSION_PREFIX + sessionId);
+    if (raw) return JSON.parse(raw);
+  } catch { /* parse error */ }
+  return null;
+}
+
+function clearChildSession(sessionId: string) {
+  try {
+    localStorage.removeItem(CHILD_SESSION_PREFIX + sessionId);
+  } catch { /* ignore */ }
+}
+
+function restoreAllChildSessions(store: SessionStore) {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(CHILD_SESSION_PREFIX)) continue;
+      const sessionId = key.slice(CHILD_SESSION_PREFIX.length);
+      if (sessionId === "master") continue;
+      const saved = loadChildSession(sessionId);
+      if (saved && saved.messages.length > 0) {
+        store.createSession(sessionId, {
+          messages: saved.messages,
+          tokensIn: saved.tokensIn,
+          tokensOut: saved.tokensOut,
+          model: saved.model,
+          status: saved.status,
+          isLoading: false,
+        });
+      }
+    }
+  } catch { /* ignore */ }
+}
 
 export interface ChatProposal {
   id: string;
@@ -161,6 +221,13 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
   onUIActionRef.current = onUIAction;
   const [loaded, setLoaded] = React.useState(false);
 
+  // Restore child sessions from localStorage on mount
+  const restoredRef = useRef(false);
+  if (!restoredRef.current) {
+    restoredRef.current = true;
+    restoreAllChildSessions(store);
+  }
+
   const updateSettings = useCallback((s: ChatSettings) => {
     settingsRef.current = s;
   }, []);
@@ -300,7 +367,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
           status: data.status,
           isLoading: data.status === "running",
         }));
-        if (data.status === "running") {
+        if (data.sessionId === "master" && data.status === "running") {
           setAgentStatusRef.current("working");
         }
         break;
@@ -352,10 +419,15 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
           }
           return updated;
         });
+        // Persist child session to localStorage
+        if (endSessionId !== "master") {
+          saveChildSession(endSessionId, store.getSession(endSessionId));
+        }
         // Safety net: re-ensure the child chat widget still exists in the layout.
+        // Skip for "terminated" — that means the user explicitly closed it.
         // The layout reducer's "add" is idempotent (skips duplicates), so this
         // is a no-op if the widget is already present.
-        if (endSessionId !== "master" && onUIActionRef.current) {
+        if (endSessionId !== "master" && data.status !== "terminated" && onUIActionRef.current) {
           onUIActionRef.current({
             action: "add",
             widgetId: `chat-${endSessionId}`,
@@ -406,6 +478,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
             messages: [...prev.messages, assistantMessage],
             isLoading: false,
             proposals: [],
+            status: "completed",
             tokensIn: data.tokensIn ?? prev.tokensIn,
             tokensOut: data.tokensOut ?? prev.tokensOut,
             liveThinking: [],
@@ -416,6 +489,7 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
             ...prev,
             isLoading: false,
             proposals: [],
+            ...(doneSessionId !== "master" ? { status: "completed" as const } : {}),
             tokensIn: data.tokensIn ?? prev.tokensIn,
             tokensOut: data.tokensOut ?? prev.tokensOut,
             liveThinking: [],
@@ -423,6 +497,9 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
         }
         if (doneSessionId === "master") {
           setAgentStatusRef.current("online");
+        } else {
+          // Persist child session to localStorage
+          saveChildSession(doneSessionId, store.getSession(doneSessionId));
         }
         break;
       }
@@ -659,6 +736,8 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
         isLoading: true,
         proposals: [],
       }));
+      // Persist child session after adding user message
+      saveChildSession(sessionId, store.getSession(sessionId));
       thinkingRefs.current.set(sessionId, []);
 
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {

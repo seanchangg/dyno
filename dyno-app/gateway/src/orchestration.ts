@@ -340,6 +340,7 @@ export class OrchestrationHandler {
     return this.children;
   }
 
+
   /** Execute an orchestration tool. Returns the tool result string. */
   async execute(
     name: string,
@@ -501,16 +502,8 @@ export class OrchestrationHandler {
           tokensOut: child.tokensOut,
         });
 
-        // Send session_ended
-        this.send({
-          type: "session_ended",
-          sessionId: child.id,
-          status: "completed",
-          result: child.result,
-          tokensIn: child.tokensIn,
-          tokensOut: child.tokensOut,
-          model: child.model,
-        });
+        // Don't send session_ended — the child stays alive for follow-ups.
+        // session_ended is only sent on explicit termination by the user.
         this.logSessionEnd(child);
         return;
       }
@@ -574,18 +567,16 @@ export class OrchestrationHandler {
       child.messages.push({ role: "user", content: toolResults });
     }
 
-    // Max iterations
+    // Max iterations — treat the same as normal completion (available for follow-ups)
     child.status = "completed";
     child.result = "Reached maximum iterations.";
-    this.send({
-      type: "session_ended",
-      sessionId: child.id,
-      status: "completed",
-      result: child.result,
+
+    await childOnEvent("done", {
+      summary: "Reached maximum iterations.",
       tokensIn: child.tokensIn,
       tokensOut: child.tokensOut,
-      model: child.model,
     });
+
     this.logSessionEnd(child);
   }
 
@@ -689,8 +680,8 @@ export class OrchestrationHandler {
 
     const child = this.children.get(sessionId);
     if (!child) return JSON.stringify({ error: `Session ${sessionId} not found` });
-    if (child.status === "completed" || child.status === "terminated" || child.status === "error") {
-      return JSON.stringify({ error: `Session ${sessionId} is already ${child.status}` });
+    if (child.status === "terminated") {
+      return JSON.stringify({ error: `Session ${sessionId} is already terminated` });
     }
 
     child.cancelled = true;
@@ -706,6 +697,9 @@ export class OrchestrationHandler {
       model: child.model,
     });
     this.logSessionEnd(child);
+
+    // Remove from children map so it can't be accidentally reused
+    this.children.delete(sessionId);
 
     return JSON.stringify({ sessionId, status: "terminated" });
   }
