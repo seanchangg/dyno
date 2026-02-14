@@ -11,6 +11,31 @@
   --font-sans: "Jost", sans-serif;
 }
 
+@keyframes card-entrance {
+  from { opacity: 0; transform: scale(0.95) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes canvas-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slow-spin-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slow-spin-ccw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(1rem); }
   to { opacity: 1; transform: translateX(0); }
@@ -34,6 +59,64 @@
 @keyframes slide-down {
   from { opacity: 0; max-height: 0; }
   to { opacity: 1; max-height: 500px; }
+}
+
+/* ── Sprite life animations ─────────────────────────────────────── */
+
+@keyframes sprite-blink {
+  0%, 42%, 44%, 100% { transform: scaleY(1); }
+  43% { transform: scaleY(0.1); }
+}
+
+@keyframes sprite-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes sleeping-z {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  30%, 70% { opacity: 1; }
+  50% { transform: translateY(-3px); }
+}
+
+/* ── Page & widget transitions ──────────────────────────────────── */
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes widget-enter {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Nav border grow ────────────────────────────────────────────── */
+
+@keyframes nav-border-pulse {
+  0%, 100% { border-left-color: rgba(168, 213, 186, 0.6); }
+  50% { border-left-color: rgba(168, 213, 186, 1); }
+}
+
+/* ── Tutorial stagger entrance ──────────────────────────────────── */
+
+@keyframes prompt-enter {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Toast slide with personality ────────────────────────────────── */
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateX(1rem) scale(0.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ── Empty canvas pulse ──────────────────────────────────────────── */
+
+@keyframes empty-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
 }
 
 html {
@@ -181,6 +264,7 @@ body {
   overflow: hidden;
   height: 100%;
   transition: transform 0.25s ease, border-color 0.25s ease, border-radius 0.25s ease, box-shadow 0.25s ease;
+  animation: widget-enter 0.4s ease-out both;
 }
 
 .widget-inner:hover {

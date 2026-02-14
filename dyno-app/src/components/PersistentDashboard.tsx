@@ -17,7 +17,7 @@ export default function PersistentDashboard() {
   const pathname = usePathname();
   const isDashboard = pathname === "/dashboard";
 
-  const { layout, setLayout, processUIAction } = useWidgetLayoutContext();
+  const { layout, syncTabPositions, processUIAction } = useWidgetLayoutContext();
   const { cancelSession } = useSession("master");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -43,20 +43,15 @@ export default function PersistentDashboard() {
     });
   }, [layout.tabs]);
 
-  const layoutRef = useRef(layout);
-  layoutRef.current = layout;
-
   const handleTabLayoutChange = useCallback(
     (tabId: string, updated: Widget[]) => {
-      const current = layoutRef.current;
-      setLayout({
-        ...current,
-        tabs: current.tabs.map((t) =>
-          t.id === tabId ? { ...t, widgets: updated } : t
-        ),
-      });
+      // Only sync positions — never add/remove widgets here.
+      // This prevents a race where a debounced GridLayout callback
+      // could overwrite a widget that was just added by processUIAction.
+      const positions = updated.map((w) => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h }));
+      syncTabPositions(tabId, positions);
     },
-    [setLayout]
+    [syncTabPositions]
   );
 
   const tabCallbacksRef = useRef(new Map<string, (updated: Widget[]) => void>());
@@ -173,7 +168,7 @@ export default function PersistentDashboard() {
       </div>
 
       {/* Add Widget Button */}
-      <div ref={menuRef} className="fixed bottom-6 right-6 z-40">
+      <div ref={menuRef} className="fixed bottom-6 right-6 z-[60]">
         {menuOpen && (
           <div className="absolute bottom-14 right-0 w-52 bg-surface border border-primary/30 shadow-lg py-1 mb-2">
             <div className="px-3 py-1.5 text-[10px] text-text/30 uppercase tracking-wider">

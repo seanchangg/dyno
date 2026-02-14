@@ -14,6 +14,7 @@ interface WidgetLayoutContextValue {
   widgets: Widget[];
   processUIAction: (action: UIAction) => void;
   setLayout: (layout: TabbedLayout) => void;
+  syncTabPositions: (tabId: string, positions: { id: string; x: number; y: number; w: number; h: number }[]) => void;
 }
 
 const WidgetLayoutContext = createContext<WidgetLayoutContextValue | null>(null);

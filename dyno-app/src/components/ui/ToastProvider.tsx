@@ -55,6 +55,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [dismiss]
   );
 
+  // Expose toast on window for dev testing: window.__toast("msg", "success")
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__toast = toast;
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__toast;
+    };
+  }, [toast]);
+
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
@@ -71,20 +81,33 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      {/* Toast container — fixed bottom-right */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+      {/* Toast container — fixed bottom-left, clear of sidebar */}
+      <div className="fixed bottom-6 left-[276px] z-[70] flex flex-col gap-3 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}
             className={clsx(
-              "pointer-events-auto px-4 py-2.5 text-sm max-w-sm cursor-pointer transition-all duration-300",
+              "pointer-events-auto px-5 py-3 text-base max-w-md cursor-pointer transition-all duration-300 border border-primary/30",
               typeStyles[t.type],
-              t.exiting ? "opacity-0 translate-x-4" : "opacity-100 translate-x-0"
+              t.exiting ? "opacity-0 -translate-x-4" : "opacity-100 translate-x-0"
             )}
-            style={{ animation: t.exiting ? undefined : "toast-in 0.3s ease-out" }}
+            style={{ animation: t.exiting ? undefined : "toast-enter 0.35s ease-out" }}
             onClick={() => dismiss(t.id)}
           >
-            {t.message}
+            <span className="flex items-center gap-3">
+              {/* Mini Marty face */}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                <rect width="24" height="24" fill="#2F5434" />
+                <circle cx="8.6" cy="9" r="2" fill="#A8D5BA" />
+                <circle cx="15.4" cy="9" r="2" fill="#A8D5BA" />
+                <path d={
+                  t.type === "error"
+                    ? "M 8.4 15.5 Q 12 13 15.6 15.5"
+                    : "M 8.4 14 Q 12 17 15.6 14"
+                } stroke="#A8D5BA" strokeWidth="0.8" strokeLinecap="round" fill="none" />
+              </svg>
+              {t.message}
+            </span>
           </div>
         ))}
       </div>

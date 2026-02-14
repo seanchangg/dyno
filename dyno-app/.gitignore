@@ -42,6 +42,10 @@ __pycache__/
 # local data (screenshots, uploads, logs, context)
 /data/
 
+# gateway runtime data (encrypted keys, workspaces)
+gateway/data/
+gateway/workspaces/
+
 # vercel
 .vercel
 

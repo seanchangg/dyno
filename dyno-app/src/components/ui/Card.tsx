@@ -1,17 +1,24 @@
 import { clsx } from "clsx";
-import { HTMLAttributes } from "react";
+import { forwardRef, HTMLAttributes } from "react";
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
 }
 
-export default function Card({ className, children, ...props }: CardProps) {
-  return (
-    <div
-      className={clsx("bg-surface border border-primary/20 p-6", className)}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
+const Card = forwardRef<HTMLDivElement, CardProps>(
+  ({ className, children, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={clsx("bg-surface border border-primary/20 p-6", className)}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  }
+);
+
+Card.displayName = "Card";
+
+export default Card;

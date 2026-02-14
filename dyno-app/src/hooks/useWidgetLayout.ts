@@ -18,7 +18,6 @@ function widgetReducer(state: Widget[], action: UIAction): Widget[] {
   switch (action.action) {
     case "add": {
       if (state.find((w) => w.id === action.widgetId)) {
-        console.log("[layout] Duplicate widget, skipping:", action.widgetId);
         return state;
       }
       const reg = action.widgetType ? getWidget(action.widgetType) : undefined;
@@ -81,7 +80,8 @@ function findBottomY(widgets: Widget[]): number {
 
 type LayoutAction =
   | { type: "set"; layout: TabbedLayout }
-  | { type: "ui_action"; action: UIAction };
+  | { type: "ui_action"; action: UIAction }
+  | { type: "sync_positions"; tabId: string; positions: { id: string; x: number; y: number; w: number; h: number }[] };
 
 function generateTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -91,6 +91,29 @@ function layoutReducer(state: TabbedLayout, action: LayoutAction): TabbedLayout 
   switch (action.type) {
     case "set":
       return action.layout;
+
+    // Only update positions of existing widgets — never adds or removes.
+    // This prevents a race where a debounced GridLayout callback could
+    // overwrite a widget that was just added by processUIAction.
+    case "sync_positions": {
+      const { tabId, positions } = action;
+      const posMap = new Map(positions.map((p) => [p.id, p]));
+      return {
+        ...state,
+        tabs: state.tabs.map((t) => {
+          if (t.id !== tabId) return t;
+          let changed = false;
+          const updated = t.widgets.map((w) => {
+            const p = posMap.get(w.id);
+            if (!p) return w;
+            if (w.x === p.x && w.y === p.y && w.w === p.w && w.h === p.h) return w;
+            changed = true;
+            return { ...w, x: p.x, y: p.y, w: p.w, h: p.h };
+          });
+          return changed ? { ...t, widgets: updated } : t;
+        }),
+      };
+    }
 
     case "ui_action": {
       const a = action.action;
@@ -221,7 +244,23 @@ export function useWidgetLayout() {
         try {
           const saved = await fetchLayout(user.id);
           if (saved && saved.tabs.length > 0) {
-            dispatch({ type: "set", layout: saved });
+            // Strip stale child chat widgets whose sessions no longer exist
+            const cleaned: TabbedLayout = {
+              ...saved,
+              tabs: saved.tabs.map((tab) => ({
+                ...tab,
+                widgets: tab.widgets.filter((w) => {
+                  if (!w.id.startsWith("chat-child-")) return true;
+                  const sessionId = w.id.replace("chat-", "");
+                  try {
+                    return localStorage.getItem(`marty-child-${sessionId}`) !== null;
+                  } catch {
+                    return false;
+                  }
+                }),
+              })),
+            };
+            dispatch({ type: "set", layout: cleaned });
             return;
           }
         } catch {
@@ -274,12 +313,20 @@ export function useWidgetLayout() {
   }, [layout, user]);
 
   const processUIAction = useCallback((action: UIAction) => {
+    console.log("[layout] processUIAction:", action.action, action.widgetId || "", action.widgetType || "");
     dispatch({ type: "ui_action", action });
   }, []);
 
   const setLayout = useCallback((newLayout: TabbedLayout) => {
     dispatch({ type: "set", layout: newLayout });
   }, []);
+
+  const syncTabPositions = useCallback(
+    (tabId: string, positions: { id: string; x: number; y: number; w: number; h: number }[]) => {
+      dispatch({ type: "sync_positions", tabId, positions });
+    },
+    []
+  );
 
   const activeTab = layout.tabs.find((t) => t.id === layout.activeTabId) || layout.tabs[0];
   const widgets = activeTab?.widgets ?? [];
@@ -290,5 +337,6 @@ export function useWidgetLayout() {
     widgets,
     processUIAction,
     setLayout,
+    syncTabPositions,
   };
 }

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import Card from "@/components/ui/Card";
 import LoginForm from "@/components/auth/LoginForm";
 import SignupForm from "@/components/auth/SignupForm";
 import DynoSprite from "@/components/sprite/DynoSprite";
+import LoginParticleCanvas from "@/components/login/LoginParticleCanvas";
+import FloatingShapes from "@/components/login/FloatingShapes";
+import InteractiveLoginCard from "@/components/login/InteractiveLoginCard";
 import { clsx } from "clsx";
 
 type Tab = "login" | "signup";
@@ -13,8 +15,10 @@ export default function LoginPage() {
   const [tab, setTab] = useState<Tab>("login");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
+    <div className="relative flex min-h-screen items-center justify-center bg-background px-4 overflow-hidden">
+      <LoginParticleCanvas />
+      <FloatingShapes />
+      <InteractiveLoginCard>
         <div className="mb-6 flex flex-col items-center gap-3">
           <DynoSprite status="online" size={56} />
           <h1 className="text-2xl font-bold tracking-wide text-highlight">
@@ -45,7 +49,7 @@ export default function LoginPage() {
         ) : (
           <SignupForm onSwitchToLogin={() => setTab("login")} />
         )}
-      </Card>
+      </InteractiveLoginCard>
     </div>
   );
 }

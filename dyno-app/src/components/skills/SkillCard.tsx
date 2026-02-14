@@ -26,7 +26,7 @@ export default function SkillCard({
   };
 
   return (
-    <div className={`bg-surface border border-primary/20 p-4 flex flex-col gap-3${expanded ? " border-b-0" : ""}`}>
+    <div className={`bg-surface border border-primary/20 p-4 flex flex-col gap-3 transition-all duration-250 ease hover:scale-[1.01] hover:border-highlight/30 hover:rounded-lg${expanded ? " border-b-0" : ""}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <button

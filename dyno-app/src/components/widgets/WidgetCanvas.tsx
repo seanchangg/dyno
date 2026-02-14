@@ -8,6 +8,7 @@ import "react-resizable/css/styles.css";
 import type { Widget } from "@/types/widget";
 import { getWidget } from "@/lib/widgets/registry";
 import Minimap from "./Minimap";
+import DynoSprite from "@/components/sprite/DynoSprite";
 
 // ── Base grid constants (never change — zoom scales visually) ────────────────
 
@@ -65,7 +66,7 @@ export default function WidgetCanvas({
 
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = loadViewport();
-    return saved ? Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, saved.zoom)) : 0;
+    return saved ? Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, saved.zoom)) : -1;
   });
 
   const zoomScale = 1 + zoomLevel * ZOOM_STEP;
@@ -221,6 +222,21 @@ export default function WidgetCanvas({
             layout, fonts, borders, widget internals, pointer coords */}
         <div style={{ zoom: zoomScale }}>
           <div style={{ width: GRID_WIDTH, minHeight: canvasHeight }}>
+            {/* Empty canvas invite */}
+            {widgets.length === 0 && (
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none"
+                style={{ animation: "fade-in 0.6s ease-out both" }}
+              >
+                <DynoSprite status="online" size={80} noTrack />
+                <p
+                  className="mt-4 text-sm text-text/30"
+                  style={{ animation: "empty-pulse 3s ease-in-out infinite" }}
+                >
+                  Drop a widget to get started
+                </p>
+              </div>
+            )}
             <GridLayout
               className="widget-grid-layout"
               layout={layout}

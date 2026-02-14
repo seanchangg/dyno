@@ -3,5 +3,6 @@
   "ui_action": "auto",
   "fetch_url": "auto",
   "spawn_agent": "auto",
-  "save_script": "auto"
+  "save_script": "auto",
+  "web_search": "auto"
 }

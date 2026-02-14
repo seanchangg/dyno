@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
@@ -441,18 +442,23 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
       }
 
       case "ui_mutation":
-        onUIActionRef.current?.({
-          action: data.action,
-          widgetId: data.widgetId,
-          widgetType: data.widgetType,
-          position: data.position,
-          size: data.size,
-          props: data.props,
-          sessionId: data.sessionId,
-          tabId: data.tabId,
-          tabLabel: data.tabLabel,
-          tabIndex: data.tabIndex,
-        });
+        console.log("[ws] ui_mutation:", data.action, data.widgetId, "handler:", !!onUIActionRef.current);
+        if (onUIActionRef.current) {
+          onUIActionRef.current({
+            action: data.action,
+            widgetId: data.widgetId,
+            widgetType: data.widgetType,
+            position: data.position,
+            size: data.size,
+            props: data.props,
+            sessionId: data.sessionId,
+            tabId: data.tabId,
+            tabLabel: data.tabLabel,
+            tabIndex: data.tabIndex,
+          });
+        } else {
+          console.warn("[ws] ui_mutation dropped — onUIAction not available");
+        }
         break;
 
       case "done": {
@@ -725,11 +731,30 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
         .slice(-settings.maxHistoryMessages)
         .map((m) => ({ role: m.role, content: m.content }));
 
+      // On the very first message, inject a setup prompt so Marty
+      // populates the dashboard with useful widgets alongside the user's request.
+      let prompt = content;
+      try {
+        if (!localStorage.getItem("marty-setup-done") && history.length <= 1) {
+          localStorage.setItem("marty-setup-done", "1");
+          prompt = content + "\n\n" +
+            "[SYSTEM — first-time setup] This is the user's first message. " +
+            "After you handle their request, also set up their dashboard by adding these widgets using ui_action: " +
+            '1. stat-card with widgetId "stat-agent-status", props {title:"Agent Status", dataSource:"agent-status"} ' +
+            '2. stat-card with widgetId "stat-cost", props {title:"Est. Total Cost", dataSource:"cost"} ' +
+            '3. agent-control with widgetId "agent-control" ' +
+            '4. memory-table with widgetId "memory-table" ' +
+            '5. screenshot-gallery with widgetId "screenshot-gallery" ' +
+            "Also remove the welcome-banner and setup-guide widgets since the user is now set up. " +
+            "Do this quietly — don't mention dashboard setup in your response unless the user asks about it.";
+        }
+      } catch { /* localStorage unavailable */ }
+
       // Send chat message through the persistent WS
       wsRef.current.send(
         JSON.stringify({
           type: "chat",
-          prompt: content,
+          prompt,
           apiKey,
           history,
           includeSystemContext: settings.includeSystemContext,
@@ -791,22 +816,27 @@ export function SessionManagerProvider({ children, onUIAction }: SessionManagerP
     authFetch("/api/chat/history", { method: "DELETE" }).catch(() => {});
   }, [store]);
 
+  // Memoize context value so layout-triggered re-renders of
+  // DashboardSessionBridge don't cascade into every chat widget.
+  const contextValue = useMemo(
+    () => ({
+      store,
+      wsRef,
+      thinkingRefs,
+      settingsRef,
+      sendMessage,
+      sendChildMessage,
+      clearMessages,
+      approveProposal,
+      denyProposal,
+      updateSettings,
+      cancelSession,
+    }),
+    [store, sendMessage, sendChildMessage, clearMessages, approveProposal, denyProposal, updateSettings, cancelSession]
+  );
+
   return (
-    <SessionManagerContext.Provider
-      value={{
-        store,
-        wsRef,
-        thinkingRefs,
-        settingsRef,
-        sendMessage,
-        sendChildMessage,
-        clearMessages,
-        approveProposal,
-        denyProposal,
-        updateSettings,
-        cancelSession,
-      }}
-    >
+    <SessionManagerContext.Provider value={contextValue}>
       {children}
     </SessionManagerContext.Provider>
   );

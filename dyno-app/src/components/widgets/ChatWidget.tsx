@@ -16,6 +16,7 @@ import { DEFAULT_CHAT_SETTINGS } from "@/types";
 import type { Memory } from "@/hooks/useMemories";
 import { useScreenshotSelection } from "@/hooks/useScreenshotSelection";
 import { useVaultSelection } from "@/hooks/useVaultSelection";
+import DynoSprite from "@/components/sprite/DynoSprite";
 
 const MODEL_PRICING: Record<string, { inPerM: number; outPerM: number }> = {
   "claude-haiku-4-5-20251001": { inPerM: 0.8, outPerM: 4 },
@@ -140,6 +141,13 @@ function ChatWidget({ sessionId = "master", memories, selectedMemoryIds }: ChatW
     <div className="flex h-full flex-col bg-surface border border-primary/20">
       <div className="border-b border-primary/20 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
+          {isChild && (
+            <DynoSprite
+              status={session.isLoading ? "working" : (session.status === "completed" ? "offline" : "online")}
+              size={18}
+              noTrack
+            />
+          )}
           <h2 className="text-sm font-semibold text-highlight">
             {isChild ? `Child: ${sessionId}` : "Agent Chat"}
           </h2>
@@ -204,11 +212,14 @@ function ChatWidget({ sessionId = "master", memories, selectedMemoryIds }: ChatW
         className="flex-1 overflow-y-auto p-4 flex flex-col gap-3"
       >
         {session.messages.length === 0 && (
-          <p className="text-sm text-text/30 text-center mt-8">
-            {isChild
-              ? "Waiting for child agent..."
-              : "Send a message to start a conversation with your agent."}
-          </p>
+          <div className="flex flex-col items-center justify-center flex-1 gap-3">
+            {!isChild && <DynoSprite status="online" size={48} />}
+            <p className="text-sm text-text/30 text-center">
+              {isChild
+                ? "Waiting for child agent..."
+                : "Send a message to start chatting with Marty."}
+            </p>
+          </div>
         )}
         {session.messages.map((msg) => (
           <ChatMessage key={msg.id} message={msg} />

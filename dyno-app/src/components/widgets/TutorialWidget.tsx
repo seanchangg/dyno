@@ -43,6 +43,8 @@ function TutorialWidget() {
     }
   };
 
+  let globalIndex = 0;
+
   return (
     <div className="h-full overflow-y-auto bg-surface border border-primary/20 p-4">
       <h2 className="text-base font-semibold text-highlight mb-1">
@@ -60,11 +62,14 @@ function TutorialWidget() {
           <div className="flex flex-col gap-1.5">
             {group.prompts.map((prompt) => {
               const isCopied = copied === prompt;
+              const delay = globalIndex * 0.06;
+              globalIndex++;
               return (
                 <button
                   key={prompt}
                   onClick={() => handleCopy(prompt)}
                   className="text-left px-3 py-2 text-xs text-text/70 bg-background border border-primary/15 hover:border-primary/40 hover:text-highlight transition-colors cursor-pointer"
+                  style={{ animation: `prompt-enter 0.35s ease-out ${delay}s both` }}
                 >
                   <span className={isCopied ? "text-highlight" : ""}>
                     {isCopied ? "Copied!" : prompt}

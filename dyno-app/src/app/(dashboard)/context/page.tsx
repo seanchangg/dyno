@@ -74,10 +74,10 @@ export default function ContextPage() {
             <button
               key={f.filename}
               onClick={() => handleFileSelect(f.filename)}
-              className={`text-left px-3 py-2 text-sm transition-colors ${
+              className={`text-left px-3 py-2 text-sm cursor-pointer transition-all duration-250 ease ${
                 selectedFile === f.filename
-                  ? "bg-primary/30 text-highlight"
-                  : "text-text/60 hover:bg-surface"
+                  ? "bg-primary/30 text-highlight border border-highlight/40 rounded-lg scale-[1.02]"
+                  : "text-text/60 hover:bg-surface border border-transparent hover:border-highlight/30 hover:rounded-lg hover:scale-[1.02]"
               }`}
             >
               {f.filename}

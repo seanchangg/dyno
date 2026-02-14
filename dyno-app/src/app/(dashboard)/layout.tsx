@@ -28,7 +28,11 @@ export default function DashboardLayout({
                 <PersistentDashboard />
                 {/* Other pages render on top; hidden when dashboard is active */}
                 {!isDashboard && (
-                  <div className="p-8">
+                  <div
+                    key={pathname}
+                    className="p-8"
+                    style={{ animation: "page-enter 0.35s ease-out both" }}
+                  >
                     {children}
                   </div>
                 )}
