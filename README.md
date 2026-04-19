@@ -43,11 +43,9 @@ Shipped widgets include:
 | `ChatWidget` | Primary conversation with the agent |
 | `MemoryWidget` | Inspect, edit, toggle persistent memories |
 | `VaultWidget` | User-owned file store the agent can read |
-| `BrowserWidget` | Live browser the agent drives |
 | `CodeBlockWidget` | Agent-authored code, runnable inline |
 | `HtmlWidget` / `MarkdownWidget` / `ImageWidget` / `TableWidget` | Rich renderings of agent output |
 | `ScreenshotWidget` | Capture + share visual context with the agent |
-| `TradingWidget`, `TradingChartsWidget`, `TradingMonitorWidget`, `TradingConfigWidget`, `TradingChatWidget`, `TradingTickerChartWidget`, `TradeWidget` | A full agentic trading surface: config, live charts, monitoring, and trade execution |
 | `AgentControlWidget` | Start, stop, steer the agent |
 | `TutorialWidget` | Inline onboarding for first-time users |
 | `StatCardWidget` | At-a-glance metrics |
@@ -63,8 +61,8 @@ marty's interface is deliberately disarming: a single chat input, no command pal
 Underneath, that one message is orchestrated across a swarm of **Mini Marties** — lightweight, widget-bound sub-agents that each own a narrow slice of the world.
 
 - **Main marty (orchestrator).** Reads the user's message, pulls selected memory / vault files / screenshots / skills into context, and decides which Mini Marties to dispatch. It plans, delegates, merges results, and speaks back in one voice.
-- **Mini Marties (specialists).** Each widget has a Mini Marty bound to it: the Trading Mini Marty watches feeds and places trades through `TradingWidget` + `useTradingWebSocket`; the Browser Mini Marty drives `BrowserWidget`; the Code Mini Marty runs snippets via `api/widget-exec`; the Vault Mini Marty reads/writes files via `api/storage`; the Memory Mini Marty curates what survives the turn via `api/memories`. They stay scoped to their widget — small, auditable, and parallelizable.
-- **Live supervision, not a black box.** Because every Mini Marty works *inside* a visible widget, the user watches orchestration happen: charts update, files open, the browser scrolls, code runs. `AgentControlWidget` and the telemetry/heartbeat routes let users pause, steer, or stop any step.
+- **Mini Marties (specialists).** Each widget has a Mini Marty bound to it: the Code Mini Marty runs snippets via `api/widget-exec`; the Vault Mini Marty reads/writes files via `api/storage`; the Memory Mini Marty curates what survives the turn via `api/memories`; the Screenshot Mini Marty handles visual context; the HTML/Markdown/Table Mini Marties render rich output back into the canvas. They stay scoped to their widget — small, auditable, and parallelizable.
+- **Live supervision, not a black box.** Because every Mini Marty works *inside* a visible widget, the user watches orchestration happen: files open, code runs, tables and markdown render in place. `AgentControlWidget` and the telemetry/heartbeat routes let users pause, steer, or stop any step.
 - **Simple to the user, rich underneath.** The user never picks a tool, never names an agent, never writes a prompt — they just talk. The chatbox hides the fan-out/fan-in completely.
 
 ---
@@ -77,11 +75,11 @@ Widgets are not passive panels. They are the tool surface the agent operates on,
 - **Vaulted file access.** `api/storage` and `api/uploads` expose a permissioned file store that the agent can read from and write to — scoped per user, selectable per turn.
 - **Skills.** `api/skills` + the Skills page let users install reusable, named capabilities. Skills appear to the agent as callable tools and to the user as labeled cards.
 - **Credentials & tool permissions.** `api/credentials` and `api/tool-permissions` gate which integrations the agent may use, so non-technical users can grant and revoke access without editing config files.
-- **Live trading loop.** `useTradingWebSocket`, `useIbkrMarketData`, and `api/market-data` / `api/strategies` / `api/webhook-data` wire the agent into real market feeds for a concrete, high-stakes agentic workflow.
+- **Webhooks.** `api/webhook`, `api/webhooks`, and `api/webhook-data` let external systems push events into the agent, and the agent respond back — the ingress/egress for everything outside the canvas.
 - **Telemetry & heartbeat.** `api/telemetry` and `api/heartbeat-config` keep the dashboard in sync with long-running agent activity, so the user can watch progress rather than wait in silence.
-- **Context assembly hooks.** `useChat`, `useMemorySelection`, `useScreenshotSelection`, `useVaultSelection`, and `useSkills` compose each agent turn from the user's current selections — memory + files + screenshots + skills — without ever exposing a prompt template.
+- **Context assembly hooks.** `useChat`, `useScreenshotSelection`, `useVaultSelection`, and `useSkills` compose each agent turn from the user's current selections — memory + files + screenshots + skills — without ever exposing a prompt template.
 
-The result is an agent that can: read a file from your vault, pull a memory about your trading preferences, open a browser to gather context, run a quick script in a code widget, render the outcome as a chart, and save a new memory — all inside one canvas the user can see, steer, and undo.
+The result is an agent that can: read a file from your vault, pull a memory about how you like to work, run a quick script in a code widget, render the outcome as a table or markdown doc, capture a screenshot, and save a new memory — all inside one canvas the user can see, steer, and undo.
 
 ---
 
@@ -90,9 +88,9 @@ The result is an agent that can: read a file from your vault, pull a memory abou
 - **Framework:** Next.js 16 (App Router), React 19, TypeScript
 - **Styling:** Tailwind CSS v4
 - **Layout:** `react-grid-layout` (zoomable canvas)
-- **Charts:** `lightweight-charts`
-- **Realtime:** native `ws` + WebSocket hooks
+- **Markdown:** `react-markdown` + `remark-gfm`
 - **Data / auth:** Supabase
+- **Gateway:** Node + `ws` + Anthropic SDK, orchestrating Mini Marties and tool execution
 - **Agent surface:** Chat + widget tool-calls over `/api/*` routes
 
 ---
@@ -116,30 +114,29 @@ npm start        # serve production build
 npm run lint     # ESLint
 ```
 
-From the repo root, `./start.sh` is provided as a one-shot launcher — it spins up a 4-pane tmux session with the Next.js app, the gateway, the Interactive Brokers bridge, and the MCP server all at once.
+You'll also want the **gateway** running in a second terminal — it's what actually talks to Anthropic. See *Self-hosting* below.
 
-Once the dev server is up, open **[http://localhost:3000/landing](http://localhost:3000/landing)** — that's the front door. From there you sign in and drop straight into the canvas.
+Once both are up, open **[http://localhost:3000/landing](http://localhost:3000/landing)** — that's the front door. From there you sign in and drop straight into the canvas.
 
 ---
 
 ## Self-hosting on your own machine
 
-marty is a small stack of four cooperating processes. You can bring it up on any laptop; the only managed dependency is Supabase.
+marty is a small stack of cooperating processes. You can bring it up on any laptop; the only managed dependency is Supabase.
 
 ### 1. Services you need to run
 
 | Process | Path | Port | Role |
 |---|---|---|---|
 | **Next.js app** | `dyno-app/` | `3000` | UI, API routes, auth |
-| **Gateway** | `dyno-app/gateway/` | `18789` (WebSocket) | Anthropic SDK orchestration, tool execution, credentials vault, skills, webhooks |
-| **IB bridge** (optional) | `dyno-app/python/ib_bridge.py` | — | Interactive Brokers → WebSocket JSON-RPC, powers the trading widgets |
-| **MCP server** (optional) | `dyno-app/python/mcp_server.py` | — | MCP tools exposed to the agent |
+| **Gateway** | `dyno-app/gateway/` | `18789` (WebSocket) | Anthropic SDK orchestration, Mini Marty dispatch, tool execution, credentials vault, skills, webhooks |
+| **MCP server** (optional) | `dyno-app/python/mcp_server.py` | — | Python MCP tools exposed to the agent (file/PDF/image utilities, HTTP fetches, Playwright, etc.) |
 
-The gateway is the workhorse — it holds the Anthropic client, executes widget tools, signs webhooks, and talks to Supabase with the service-role key. The Next.js app is thin by comparison.
+The gateway is the workhorse — it holds the Anthropic client, dispatches Mini Marties, executes widget tools, signs webhooks, and talks to Supabase with the service-role key. The Next.js app is thin by comparison.
 
 ### 2. Supabase
 
-All persistent state (profiles, memories, screenshots, widget layouts, vault storage, credentials, webhooks, trading strategies, chat history, token usage) lives in Supabase. The schema is versioned in `dyno-app/supabase/migrations/` — 23 migrations at time of writing.
+All persistent state (profiles, memories, screenshots, widget layouts, vault storage, credentials, webhooks, chat history, token usage) lives in Supabase. The schema is versioned in `dyno-app/supabase/migrations/` — 18 migrations at time of writing.
 
 ```bash
 # Option A — Supabase Cloud
@@ -190,34 +187,29 @@ FRONTEND_URL=http://localhost:3000
 
 The gateway reads its own `dyno-app/gateway/.env` — at minimum it needs `ANTHROPIC_API_KEY`, the Supabase URL + service-role key, and the same `GATEWAY_KEY_STORE_SECRET` as the app so the two trust each other.
 
-### 4. Python bridges (only if you want trading / MCP)
+### 4. Python MCP server (optional)
+
+The MCP server gives the agent access to a sandboxed set of Python utilities — file conversions, PDF/markdown generation, HTTP fetches, Playwright, image handling. Skip it if you don't need any of that.
 
 ```bash
 cd dyno-app/python
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+playwright install    # only if you want the browsing tools
 
-# Trading (requires TWS or IB Gateway running locally on 7497)
-python ib_bridge.py
-
-# MCP tools
 python mcp_server.py
 ```
-
-Skip this section entirely if you're not using the trading widgets — the rest of marty runs fine without it.
 
 ### 5. Bring it all up
 
 ```bash
-# One-shot (tmux, 4 panes):
-./start.sh
-
-# …or manually, in four terminals:
+# Two terminals for the minimum stack:
 cd dyno-app && npm install && npm run dev            # Next.js   :3000
 cd dyno-app/gateway && npm install && npm run dev    # Gateway   :18789
-cd dyno-app/python && python ib_bridge.py            # IB bridge (optional)
-cd dyno-app/python && python mcp_server.py           # MCP       (optional)
+
+# Optional third terminal:
+cd dyno-app/python && python mcp_server.py           # MCP tools
 ```
 
 Then visit **[http://localhost:3000/landing](http://localhost:3000/landing)**, create an account against your Supabase project, and the canvas is yours.
@@ -227,9 +219,9 @@ Then visit **[http://localhost:3000/landing](http://localhost:3000/landing)**, c
 - **App:** any Next.js-compatible host (Vercel, Fly, a container). Set every `.env.local` value in the host's env dashboard.
 - **Gateway:** deploy as a long-running Node process (Fly, Railway, a VM). It must be reachable over WebSocket from the app — update `NEXT_PUBLIC_GATEWAY_URL` accordingly (`wss://...` in production).
 - **Supabase:** cloud is easiest; migrations apply the same way.
-- **Python bridges:** run on a machine with access to IB TWS/Gateway. Not needed for non-trading deployments.
+- **MCP server:** only needed if you use its tools. Run it alongside the gateway on the same host.
 
-A minimum deploy is therefore: Next.js + Gateway + Supabase. Everything else is opt-in.
+A minimum deploy is therefore: Next.js + Gateway + Supabase. The MCP server is opt-in.
 
 ---
 
@@ -238,25 +230,27 @@ A minimum deploy is therefore: Next.js + Gateway + Supabase. Everything else is 
 ```
 dyno/
 ├── README.md
-├── start.sh
 └── dyno-app/
+    ├── gateway/              # Node WebSocket gateway — Anthropic SDK, Mini Marty dispatch, tool exec
+    ├── python/               # Optional MCP server + sandboxed Python tools
+    ├── supabase/migrations/  # Schema (profiles, memories, vault, widget layouts, credentials, webhooks, …)
     └── src/
         ├── app/
-        │   ├── (dashboard)/    # Authenticated dashboard routes (canvas, trading, vault, skills, settings)
-        │   ├── api/            # Agent tool + data routes (memories, skills, widget-exec, market-data, …)
+        │   ├── (dashboard)/  # Authenticated dashboard routes (canvas, vault, skills, settings, agent-lab)
+        │   ├── api/          # Agent tool + data routes (memories, skills, widget-exec, storage, webhooks, …)
         │   ├── landing/
         │   └── login/
         ├── components/
-        │   ├── widgets/        # Canvas widgets (the agent's tool surface)
-        │   ├── chat/           # Chat + memory table
-        │   ├── sidebar/        # Navigation
-        │   ├── sprite/         # Dyno agent sprite
-        │   ├── trading/        # Trading-specific surfaces
-        │   ├── vault/          # File vault UI
-        │   └── skills/         # Installable skills UI
-        ├── hooks/              # useChat, useMemorySelection, useSessionManager, useTradingWebSocket, …
-        ├── contexts/           # Canvas zoom, layout, selection providers
-        ├── lib/                # Widget registry, clients
+        │   ├── widgets/      # Canvas widgets (the agent's tool surface)
+        │   ├── chat/         # Chat + memory table
+        │   ├── sidebar/      # Navigation
+        │   ├── sprite/       # marty agent sprite
+        │   ├── agent-lab/    # Agent lab / internals UI
+        │   ├── vault/        # File vault UI
+        │   └── skills/       # Installable skills UI
+        ├── hooks/            # useChat, useSessionManager, useScreenshots, useVaultFiles, …
+        ├── contexts/         # Canvas zoom, layout, selection providers
+        ├── lib/              # Widget registry, Supabase clients, agent config
         └── types/
 ```
 
